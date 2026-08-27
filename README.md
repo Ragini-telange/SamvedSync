@@ -284,13 +284,6 @@ npm run build
 4. Add environment variables (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)
 5. Click **Deploy**
 
-### Deploy on Netlify
-1. Push code to GitHub
-2. Go to [app.netlify.com](https://app.netlify.com) → Import repository
-3. Build command: `npm run build` | Publish directory: `dist` | Base directory: `app`
-4. Add environment variables
-5. Click **Deploy Site**
-
 ---
 
 ## 🏆 Innovation Highlights
