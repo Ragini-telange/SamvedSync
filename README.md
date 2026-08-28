@@ -2,6 +2,8 @@
 
 # 🏥 SamvedSync — Smart IV Monitoring & Clinical Patient Care Platform
 
+# https://samved-sync.vercel.app/
+
 ### Real-Time IoT-Powered Intravenous Drip Monitoring with AI Risk Intelligence
 
 [![React](https://img.shields.io/badge/React-18.3-61DAFB?style=for-the-badge&logo=react&logoColor=white)](https://react.dev)
