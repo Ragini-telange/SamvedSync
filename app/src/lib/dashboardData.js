@@ -5,10 +5,31 @@ export async function loadPatients() {
     .from('patients')
     .select('*, nurses(id, profile_id, employee_id, phone, ward, profiles(name, username)), doctor_patients(doctor_id, doctors(profiles(name)))')
     .order('admitted_at', { ascending: false });
-  return (data || []).map((p) => ({
+
+  if (!data || data.length === 0) return [];
+
+  // Query latest readings for each patient so dashboard cards show real hardware telemetry
+  const patientIds = data.map((p) => p.id);
+  const { data: readings } = await supabase
+    .from('readings')
+    .select('*')
+    .in('patient_id', patientIds)
+    .order('recorded_at', { ascending: false });
+
+  const readingsMap = {};
+  if (readings) {
+    for (const r of readings) {
+      if (!readingsMap[r.patient_id]) {
+        readingsMap[r.patient_id] = r;
+      }
+    }
+  }
+
+  return data.map((p) => ({
     ...p,
     assigned_doctor_id: p.doctor_patients?.[0]?.doctor_id || null,
-    doctors: p.doctor_patients?.[0]?.doctors || null
+    doctors: p.doctor_patients?.[0]?.doctors || null,
+    latest_reading: readingsMap[p.id] || null
   }));
 }
 

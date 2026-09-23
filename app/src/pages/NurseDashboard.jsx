@@ -60,7 +60,13 @@ export default function NurseDashboard() {
     setLoading(false);
   }, [profile]);
 
-  useEffect(() => { loadAll(); }, [loadAll]);
+  useEffect(() => { 
+    loadAll();
+    const interval = setInterval(() => {
+      loadAll();
+    }, 15000); // 15-second hardware sync interval
+    return () => clearInterval(interval);
+  }, [loadAll]);
 
   // Live updates via Supabase Realtime
   useEffect(() => {
@@ -182,9 +188,36 @@ export default function NurseDashboard() {
                 const targetRate = p.drop_factor && p.prescribed_rate_ml_hr
                   ? ((p.prescribed_rate_ml_hr * p.drop_factor) / 60).toFixed(1)
                   : '25.0';
+
+                // Real hardware telemetry from latest reading
+                const reading = p.latest_reading;
+                const hasReading = !!reading;
+                const liveDropRate = hasReading && reading.drop_rate !== null && reading.drop_rate !== undefined
+                  ? Number(reading.drop_rate).toFixed(1)
+                  : null;
+                const isStopped = hasReading
+                  ? (reading.device_status === 'Stopped' || Number(reading.drop_rate) === 0)
+                  : !p.is_active;
+                const isBackflow = hasReading ? Boolean(reading.reverse_flow) : false;
+                const ivLevel = hasReading && reading.iv_level !== null && reading.iv_level !== undefined
+                  ? Math.round(Number(reading.iv_level))
+                  : null;
                 
-                const status = p.is_active ? 'Normal' : 'Disconnected';
-                const statusColor = p.is_active ? 'text-emerald-600 bg-emerald-500/10 border-emerald-500/20' : 'text-slate-500 bg-slate-100 border-slate-200';
+                const status = isBackflow
+                  ? 'Backflow Alert'
+                  : isStopped
+                  ? 'Drip Stopped'
+                  : p.is_active
+                  ? 'Flowing Normal'
+                  : 'Disconnected';
+
+                const statusColor = isBackflow
+                  ? 'text-rose-600 bg-rose-500/15 border-rose-500/30'
+                  : isStopped
+                  ? 'text-amber-600 bg-amber-500/15 border-amber-500/30'
+                  : p.is_active
+                  ? 'text-emerald-600 bg-emerald-500/10 border-emerald-500/20'
+                  : 'text-slate-500 bg-slate-100 border-slate-200';
                 
                 return (
                   <motion.div 
@@ -203,7 +236,7 @@ export default function NurseDashboard() {
                         </p>
                       </div>
                       <div className={`px-3 py-1 rounded-full border text-xs font-semibold flex items-center gap-1.5 ${statusColor}`}>
-                        {p.is_active && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+                        <span className={`w-1.5 h-1.5 rounded-full ${isBackflow ? 'bg-rose-500 animate-ping' : isStopped ? 'bg-amber-500' : p.is_active ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
                         {status}
                       </div>
                     </div>
@@ -211,20 +244,50 @@ export default function NurseDashboard() {
                     <div className="p-5 flex-1 flex flex-col gap-4 justify-between">
                       <div className="grid grid-cols-2 gap-2 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/50">
                         <div>
-                          <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">IV Line Drop Rate</p>
-                          <p className="font-mono text-lg font-bold text-saline mt-0.5">{targetRate} <span className="text-xs text-slate-400 font-normal">gtt/min</span></p>
+                          <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Live Drip Rate</p>
+                          <p className="font-mono text-lg font-bold text-saline mt-0.5">
+                            {liveDropRate !== null ? (
+                              <>
+                                {liveDropRate} <span className="text-xs text-slate-400 font-normal">gtt/min</span>
+                              </>
+                            ) : (
+                              <span className="text-xs text-slate-400 font-normal italic">Awaiting sensor...</span>
+                            )}
+                          </p>
                         </div>
                         <div>
-                          <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Prescribed Rate</p>
-                          <p className="font-mono text-lg font-bold text-ink dark:text-white mt-0.5">{p.prescribed_rate_ml_hr || 100} <span className="text-xs text-slate-400 font-normal">mL/hr</span></p>
+                          <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Prescribed Target</p>
+                          <p className="font-mono text-lg font-bold text-ink dark:text-white mt-0.5">
+                            {targetRate} <span className="text-xs text-slate-400 font-normal">gtt/min</span>
+                          </p>
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between px-3.5 py-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-xs">
-                        <span className="font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                      <div className={`flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs border ${
+                        isBackflow 
+                          ? 'bg-rose-500/15 border-rose-500/30 text-rose-700 dark:text-rose-300' 
+                          : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+                      }`}>
+                        <span className="font-semibold flex items-center gap-1.5">
                           <Heart className="w-3.5 h-3.5 fill-current" /> Blood Flow Detector
                         </span>
-                        <span className="font-bold text-emerald-700 dark:text-emerald-400">Normal (No Backflow)</span>
+                        <span className="font-bold">
+                          {isBackflow ? '⚠️ Blood Backflow Detected!' : '✓ Clear (No Backflow)'}
+                        </span>
+                      </div>
+
+                      {/* IV Level & Flow Info */}
+                      <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/50 flex justify-between items-center text-xs">
+                        <div className="flex items-center gap-2">
+                          <Droplet className="w-3.5 h-3.5 text-blue-500" />
+                          <span className="text-slate-500">IV Fluid Level:</span>
+                          <span className="font-mono font-bold text-ink dark:text-white">
+                            {ivLevel !== null ? `${ivLevel}%` : '—'}
+                          </span>
+                        </div>
+                        <span className="text-slate-400 font-mono text-[11px]">
+                          Target: {p.prescribed_rate_ml_hr || 100} mL/hr
+                        </span>
                       </div>
 
                       <div className="pt-2 text-xs font-semibold text-saline flex items-center justify-between group-hover:translate-x-1 transition-transform border-t border-slate-100 dark:border-slate-800">

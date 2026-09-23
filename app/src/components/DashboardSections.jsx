@@ -157,13 +157,13 @@ export function Overview({ patients, nurses, extraStat, unacknowledged, alerts, 
                   <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="font-bold text-ink dark:text-white text-sm">{p.name}</div>
-                      <div className="text-xs text-slate-400">Age: {p.age || 40}</div>
+                      <div className="text-xs text-slate-400">{p.age ? `Age: ${p.age}` : 'Age: —'}</div>
                     </td>
                     <td className="px-6 py-4 font-mono font-semibold text-slate-700 dark:text-slate-300">{p.bed_number}</td>
                     <td className="px-6 py-4 text-slate-700 dark:text-slate-300 font-medium">{p.ward || 'ICU'}</td>
                     <td className="px-6 py-4">
                       <span className="font-semibold text-xs text-saline bg-saline/10 px-3 py-1 rounded-full uppercase border border-saline/20">
-                        {p.nurses?.profiles?.name || 'SAVITA MANE'}
+                        {p.nurses?.profiles?.name || 'UNASSIGNED'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -224,11 +224,11 @@ export function Overview({ patients, nurses, extraStat, unacknowledged, alerts, 
               ) : (
                 nurses.slice(0, 5).map((n, idx) => (
                   <tr key={n.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
-                    <td className="px-6 py-4 font-bold text-ink dark:text-white">{n.profiles?.name || 'Savita Mane'}</td>
-                    <td className="px-6 py-4 text-slate-600 dark:text-slate-400 font-mono text-xs">{n.profiles?.username || 'nurse1@mediflow.com'}</td>
-                    <td className="px-6 py-4 font-mono font-bold text-xs text-slate-800 dark:text-slate-200">{n.employee_id || `N00${idx + 1}`}</td>
-                    <td className="px-6 py-4 text-slate-700 dark:text-slate-300 font-medium">{n.ward || 'ICU Ward 1A'}</td>
-                    <td className="px-6 py-4 text-slate-600 dark:text-slate-400 font-mono text-xs">{n.phone || '9876543210'}</td>
+                    <td className="px-6 py-4 font-bold text-ink dark:text-white">{n.profiles?.name || 'Nurse'}</td>
+                    <td className="px-6 py-4 text-slate-600 dark:text-slate-400 font-mono text-xs">{n.profiles?.username || '—'}</td>
+                    <td className="px-6 py-4 font-mono font-bold text-xs text-slate-800 dark:text-slate-200">{n.employee_id || `N${String(idx + 1).padStart(3, '0')}`}</td>
+                    <td className="px-6 py-4 text-slate-700 dark:text-slate-300 font-medium">{n.ward || 'General'}</td>
+                    <td className="px-6 py-4 text-slate-600 dark:text-slate-400 font-mono text-xs">{n.phone || '—'}</td>
                   </tr>
                 ))
               )}

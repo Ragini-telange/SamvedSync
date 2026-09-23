@@ -81,9 +81,37 @@ export default function DoctorPatientBoxes({
               ? ((p.prescribed_rate_ml_hr * p.drop_factor) / 60).toFixed(1)
               : '25.0';
 
-            const nurseName = p.nurses?.profiles?.name || 'Savita Mane';
-            const ivLevel = 85; // baseline visual level
-            const isNormal = p.is_active;
+            const nurseName = p.nurses?.profiles?.name || (nurses.find(n => n.id === p.assigned_nurse_id)?.profiles?.name) || 'Unassigned';
+            
+            // Real hardware telemetry from latest reading
+            const reading = p.latest_reading;
+            const hasReading = !!reading;
+            const liveDropRate = hasReading && reading.drop_rate !== null && reading.drop_rate !== undefined 
+              ? Number(reading.drop_rate).toFixed(1) 
+              : null;
+            const isStopped = hasReading 
+              ? (reading.device_status === 'Stopped' || Number(reading.drop_rate) === 0) 
+              : !p.is_active;
+            const isBackflow = hasReading ? Boolean(reading.reverse_flow) : false;
+            const ivLevel = hasReading && reading.iv_level !== null && reading.iv_level !== undefined 
+              ? Math.round(Number(reading.iv_level)) 
+              : null;
+
+            const statusText = isBackflow 
+              ? 'Backflow Alert' 
+              : isStopped 
+              ? 'Drip Stopped' 
+              : p.is_active 
+              ? 'Flowing Normal' 
+              : 'Inactive';
+
+            const statusClass = isBackflow 
+              ? 'bg-rose-500/15 text-rose-600 border-rose-500/30' 
+              : isStopped 
+              ? 'bg-amber-500/15 text-amber-600 border-amber-500/30' 
+              : p.is_active 
+              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' 
+              : 'bg-slate-100 text-slate-500 border-slate-200';
 
             return (
               <motion.div
@@ -111,37 +139,49 @@ export default function DoctorPatientBoxes({
                       </p>
                     </div>
 
-                    <div className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 ${
-                      isNormal 
-                        ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' 
-                        : 'bg-rose-500/10 text-rose-600 border border-rose-500/20'
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${isNormal ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-                      {isNormal ? 'Normal' : 'Attention'}
+                    <div className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 border ${statusClass}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${isBackflow ? 'bg-rose-500 animate-ping' : isStopped ? 'bg-amber-500' : p.is_active ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                      {statusText}
                     </div>
                   </div>
 
-                  {/* Telemetry Metrics Grid (Exactly as requested in prompt) */}
+                  {/* Telemetry Metrics Grid (Strictly Real Sensor Hardware Telemetry) */}
                   <div className="space-y-3 mb-6">
                     {/* Rate Comparison Box */}
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/50">
-                        <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">IV Line Drop Rate</span>
-                        <span className="font-mono font-bold text-saline text-base mt-0.5 block">{targetRate} <span className="text-xs text-slate-400 font-normal">gtt/min</span></span>
+                        <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Live Drip Rate</span>
+                        <span className="font-mono font-bold text-saline text-base mt-0.5 block">
+                          {liveDropRate !== null ? (
+                            <>
+                              {liveDropRate} <span className="text-xs text-slate-400 font-normal">gtt/min</span>
+                            </>
+                          ) : (
+                            <span className="text-xs text-slate-400 font-normal italic">Awaiting sensor...</span>
+                          )}
+                        </span>
                       </div>
 
                       <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/50">
-                        <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Prescribed Rate</span>
-                        <span className="font-mono font-bold text-ink dark:text-white text-base mt-0.5 block">{p.prescribed_rate_ml_hr || 100} <span className="text-xs text-slate-400 font-normal">mL/hr</span></span>
+                        <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Prescribed Target</span>
+                        <span className="font-mono font-bold text-ink dark:text-white text-base mt-0.5 block">
+                          {targetRate} <span className="text-xs text-slate-400 font-normal">gtt/min</span>
+                        </span>
                       </div>
                     </div>
 
                     {/* Blood Flow Detector Row */}
-                    <div className="flex items-center justify-between px-3.5 py-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-xs">
-                      <span className="font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                    <div className={`flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs border ${
+                      isBackflow 
+                        ? 'bg-rose-500/15 border-rose-500/30 text-rose-700 dark:text-rose-300' 
+                        : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+                    }`}>
+                      <span className="font-semibold flex items-center gap-1.5">
                         <Heart className="w-3.5 h-3.5 fill-current" /> Blood Flow Detector
                       </span>
-                      <span className="font-bold text-emerald-700 dark:text-emerald-400">Normal (No Backflow)</span>
+                      <span className="font-bold">
+                        {isBackflow ? '⚠️ Blood Backflow Detected!' : '✓ Clear (No Backflow)'}
+                      </span>
                     </div>
 
                     {/* IV Level & Assigned Staff Info */}
@@ -149,7 +189,9 @@ export default function DoctorPatientBoxes({
                       <div className="flex items-center gap-2">
                         <Droplet className="w-3.5 h-3.5 text-blue-500" />
                         <span className="text-slate-500">IV Fluid Level:</span>
-                        <span className="font-mono font-bold text-ink dark:text-white">{ivLevel}%</span>
+                        <span className="font-mono font-bold text-ink dark:text-white">
+                          {ivLevel !== null ? `${ivLevel}%` : '—'}
+                        </span>
                       </div>
                       <span className="text-slate-400 truncate max-w-[130px]">
                         Nurse: <strong className="text-saline">{nurseName}</strong>

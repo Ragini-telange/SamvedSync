@@ -19,6 +19,7 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
   const [timeline, setTimeline] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [liveData, setLiveData] = useState(null);
 
   // Direct Staff Messaging State
   const [directiveText, setDirectiveText] = useState('');
@@ -33,12 +34,12 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
     ? ((patient.prescribed_rate_ml_hr * patient.drop_factor) / 60).toFixed(1)
     : '25.0';
 
-  const nurseName = patient?.nurses?.profiles?.name || 'Savita Mane';
-  const nurseProfileId = patient?.nurses?.profile_id;
+  const nurseName = patient?.nurses?.profiles?.name || (nurses.find(n => n.id === patient?.assigned_nurse_id)?.profiles?.name) || 'Not Assigned';
+  const nurseProfileId = patient?.nurses?.profile_id || nurses.find(n => n.id === patient?.assigned_nurse_id)?.profile_id;
 
   // Find linked doctor name if available
-  const docObj = doctors.find(d => patient?.doctor_patients?.some(dp => dp.doctor_id === d.id));
-  const doctorName = docObj?.profiles?.name || 'Dr. Mehta';
+  const docObj = doctors.find(d => patient?.doctor_patients?.some(dp => dp.doctor_id === d.id) || d.id === patient?.assigned_doctor_id);
+  const doctorName = patient?.doctors?.profiles?.name || docObj?.profiles?.name || 'Not Assigned';
 
   const fetchData = useCallback(async () => {
     if (!patient?.id) return;
@@ -60,7 +61,10 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
     async function initialSync() {
       // Sync hardware telemetry directly from ThingSpeak
       try {
-        await syncPatientThingSpeakData(patient);
+        const live = await syncPatientThingSpeakData(patient);
+        if (live && mounted) {
+          setLiveData(live);
+        }
       } catch (err) {
         console.warn('Direct ThingSpeak sync notice:', err.message);
       }
@@ -75,7 +79,10 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
     // Poll ThingSpeak hardware updates every 15 seconds (ThingSpeak rate limit)
     const interval = setInterval(async () => {
       try {
-        await syncPatientThingSpeakData(patient);
+        const live = await syncPatientThingSpeakData(patient);
+        if (live && mounted) {
+          setLiveData(live);
+        }
         if (mounted) await fetchData();
       } catch (e) {
         console.warn('Poll interval error:', e.message);
@@ -91,7 +98,8 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
   const handleManualRefresh = async () => {
     setRefreshing(true);
     try {
-      await syncPatientThingSpeakData(patient);
+      const live = await syncPatientThingSpeakData(patient);
+      if (live) setLiveData(live);
       await fetchData();
       if (showToast) showToast('Hardware Telemetry Synced', 'Latest sensor readings fetched from ThingSpeak.');
     } finally {
@@ -144,35 +152,49 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
     }
   };
 
-  // Derive latest telemetric state
+  // Derive latest telemetric state (Strictly real hardware telemetry, zero mock data)
   const latestReading = readings.length > 0 ? readings[readings.length - 1] : null;
-  const currentDripRate = latestReading?.drop_rate !== undefined ? Number(latestReading.drop_rate).toFixed(1) : targetGttMin;
-  const currentIvLevel = latestReading?.iv_level !== undefined ? Number(latestReading.iv_level) : 85.0;
-  const isFlowStopped = latestReading ? (latestReading.device_status === 'Stopped' || Number(latestReading.drop_rate) === 0) : false;
-  const isBackflow = latestReading ? Boolean(latestReading.reverse_flow) : false;
+
+  const currentDripRate = liveData?.drip_rate !== undefined && liveData?.drip_rate !== null
+    ? Number(liveData.drip_rate).toFixed(1)
+    : (latestReading?.drop_rate !== undefined && latestReading.drop_rate !== null ? Number(latestReading.drop_rate).toFixed(1) : null);
+
+  const currentIvLevel = liveData?.iv_level !== undefined && liveData?.iv_level !== null
+    ? Number(liveData.iv_level)
+    : (latestReading?.iv_level !== undefined && latestReading.iv_level !== null ? Number(latestReading.iv_level) : null);
+
+  const isFlowStopped = liveData?.flow_status !== undefined
+    ? (liveData.flow_status === 0 || liveData.drip_rate === 0)
+    : (latestReading ? (latestReading.device_status === 'Stopped' || Number(latestReading.drop_rate) === 0) : !patient.is_active);
+
+  const isBackflow = liveData?.reverse_flow !== undefined
+    ? Boolean(liveData.reverse_flow)
+    : (latestReading ? Boolean(latestReading.reverse_flow) : false);
 
   // Evaluate Prototype Risk Analysis
   const riskAnalysis = calculatePrototypeRisk({
-    dripRate: Number(currentDripRate),
+    dripRate: currentDripRate !== null ? Number(currentDripRate) : 0,
     flowStatus: isFlowStopped ? 0 : 1,
     reverseFlow: isBackflow,
-    ivLevel: currentIvLevel,
+    ivLevel: currentIvLevel !== null ? currentIvLevel : 100,
     targetRate: Number(targetGttMin),
     recentAlertsCount: alerts.filter(a => !a.acknowledged).length
   });
 
   // Calculate What-If comparison
   const totalVolumeMl = 500; // Standard 500 mL IV infusion bottle
-  const currentVolumeRemaining = Math.max(0, Math.round((totalVolumeMl * (currentIvLevel / 100))));
+  const currentVolumeRemaining = currentIvLevel !== null
+    ? Math.max(0, Math.round((totalVolumeMl * (currentIvLevel / 100))))
+    : null;
   
   // Current time remaining at prescribed rate
   const currentFlowRateMlHr = patient?.prescribed_rate_ml_hr || 100;
-  const currentTimeHours = currentFlowRateMlHr > 0 ? (currentVolumeRemaining / currentFlowRateMlHr) : 0;
+  const currentTimeHours = currentVolumeRemaining !== null && currentFlowRateMlHr > 0 ? (currentVolumeRemaining / currentFlowRateMlHr) : 0;
   const currentHrs = Math.floor(currentTimeHours);
   const currentMins = Math.round((currentTimeHours - currentHrs) * 60);
 
   // Simulated time remaining
-  const simTimeHours = Number(simFlowRate) > 0 ? (currentVolumeRemaining / Number(simFlowRate)) : 0;
+  const simTimeHours = currentVolumeRemaining !== null && Number(simFlowRate) > 0 ? (currentVolumeRemaining / Number(simFlowRate)) : 0;
   const simHrs = Math.floor(simTimeHours);
   const simMins = Math.round((simTimeHours - simHrs) * 60);
 
@@ -218,7 +240,7 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
             </span>
           </div>
           <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
-            Bed <span className="font-bold text-ink dark:text-white font-mono">{patient.bed_number}</span> · {patient.ward || 'ICU Ward'} · Age: {patient.age || 20} · Gender: {patient.gender || 'Not specified'}
+            Bed <span className="font-bold text-ink dark:text-white font-mono">{patient.bed_number}</span> · {patient.ward || 'ICU Ward'} · Age: {patient.age ? `${patient.age}y` : 'Not specified'} · Gender: {patient.gender || 'Not specified'}
           </p>
           <div className="text-xs text-slate-500 mt-2 flex flex-wrap gap-4">
             <span>Diagnosis: <strong className="text-ink dark:text-white">{patient.diagnosis || 'Observation'}</strong></span>
@@ -249,7 +271,13 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
             <Droplet className="w-4 h-4" /> DRIP RATE
           </div>
           <div>
-            <div className="text-4xl font-bold font-mono text-ink dark:text-white">{currentDripRate}</div>
+            <div className="text-4xl font-bold font-mono text-ink dark:text-white">
+              {currentDripRate !== null ? (
+                currentDripRate
+              ) : (
+                <span className="text-xl text-slate-400 font-normal italic">Awaiting data...</span>
+              )}
+            </div>
             <div className="text-xs text-slate-400 mt-1">drops per minute (gtt/min)</div>
           </div>
           <div className="text-[11px] text-slate-500 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 font-mono">
@@ -295,17 +323,21 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
             <Activity className="w-4 h-4" /> IV FLUID LEVEL
           </div>
           <div>
-            <div className="text-4xl font-bold font-mono text-ink dark:text-white">{Math.round(currentIvLevel)}%</div>
-            <div className="text-xs text-slate-400 mt-1">≈ {currentVolumeRemaining} mL remaining</div>
+            <div className="text-4xl font-bold font-mono text-ink dark:text-white">
+              {currentIvLevel !== null ? `${Math.round(currentIvLevel)}%` : '—'}
+            </div>
+            <div className="text-xs text-slate-400 mt-1">
+              {currentVolumeRemaining !== null ? `≈ ${currentVolumeRemaining} mL remaining` : 'Volume level not recorded'}
+            </div>
           </div>
           {/* Progress visual bar */}
           <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
             <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
               <div 
                 className={`h-full transition-all duration-500 ${
-                  currentIvLevel <= 20 ? 'bg-rose-500' : currentIvLevel <= 50 ? 'bg-amber-500' : 'bg-saline'
+                  (currentIvLevel ?? 100) <= 20 ? 'bg-rose-500' : (currentIvLevel ?? 100) <= 50 ? 'bg-amber-500' : 'bg-saline'
                 }`}
-                style={{ width: `${Math.max(5, currentIvLevel)}%` }}
+                style={{ width: `${Math.max(5, currentIvLevel ?? 0)}%` }}
               />
             </div>
           </div>
@@ -565,15 +597,23 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
           <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/60 space-y-3">
             <div className="flex justify-between items-center text-xs">
               <span className="text-slate-500">Current Prescribed Finish Time:</span>
-              <span className="font-mono font-bold text-ink dark:text-white">{currentHrs}h {currentMins}m remaining</span>
+              <span className="font-mono font-bold text-ink dark:text-white">
+                {currentIvLevel !== null ? `${currentHrs}h ${currentMins}m remaining` : 'Awaiting sensor...'}
+              </span>
             </div>
             <div className="flex justify-between items-center text-xs">
               <span className="text-slate-500">Simulated Finish Time ({simFlowRate} mL/hr):</span>
-              <span className="font-mono font-bold text-saline">{simHrs}h {simMins}m remaining</span>
+              <span className="font-mono font-bold text-saline">
+                {currentIvLevel !== null ? `${simHrs}h ${simMins}m remaining` : '—'}
+              </span>
             </div>
             <div className="pt-2 border-t border-slate-200 dark:border-slate-700 text-xs font-semibold text-purple-600 dark:text-purple-400 flex justify-between">
               <span>Time Difference:</span>
-              <span>{diffMins > 0 ? `Empties ${diffMins} mins earlier` : diffMins < 0 ? `Extends by ${Math.abs(diffMins)} mins` : 'No difference'}</span>
+              <span>
+                {currentIvLevel !== null 
+                  ? (diffMins > 0 ? `Empties ${diffMins} mins earlier` : diffMins < 0 ? `Extends by ${Math.abs(diffMins)} mins` : 'No difference')
+                  : '—'}
+              </span>
             </div>
           </div>
         </div>

@@ -27,6 +27,7 @@ const DEFAULT_CHANNEL_ID = '3249576';
 
 // In-memory cache to prevent duplicate database writes and alert spamming
 const lastProcessedEntryMap = new Map();
+const lastProcessedDataMap = new Map();
 const lastAlertTimestampMap = new Map(); // key: `${patientId}_${alertType}` -> timestamp
 
 /**
@@ -92,10 +93,9 @@ export async function syncPatientThingSpeakData(patient) {
 
   // Check if this hardware entry was already saved to Supabase
   const patientKey = `${patient.id}_${channelId}`;
-  if (lastProcessedEntryMap.get(patientKey) === latest.entry_id) {
-    return latest; // Already processed, return without duplicate DB insert
+  if (lastProcessedEntryMap.get(patientKey) === latest.entry_id && lastProcessedDataMap.has(patientKey)) {
+    return lastProcessedDataMap.get(patientKey);
   }
-  lastProcessedEntryMap.set(patientKey, latest.entry_id);
 
   // Target drip rate calculation: (prescribed_rate_ml_hr * drop_factor) / 60
   const targetRate = patient.drop_factor && patient.prescribed_rate_ml_hr
@@ -103,7 +103,7 @@ export async function syncPatientThingSpeakData(patient) {
     : 25.0;
 
   // Query most recent IV level from database to continue depletion curve
-  let currentIvLevel = 85.0;
+  let currentIvLevel = 100.0;
   try {
     const { data: recentReadings } = await supabase
       .from('readings')
@@ -155,11 +155,16 @@ export async function syncPatientThingSpeakData(patient) {
   // 2. Evaluate Alert Conditions with Cooldown
   await evaluateAndGenerateAlerts(patient, latest, currentIvLevel, targetRate);
 
-  return {
+  const processedData = {
     ...latest,
-    iv_level: currentIvLevel,
+    iv_level: Math.round(currentIvLevel * 10) / 10,
     risk: riskResult
   };
+
+  lastProcessedEntryMap.set(patientKey, latest.entry_id);
+  lastProcessedDataMap.set(patientKey, processedData);
+
+  return processedData;
 }
 
 /**
