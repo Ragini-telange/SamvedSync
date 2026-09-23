@@ -195,6 +195,9 @@ export default function NurseDashboard() {
                 const liveDropRate = hasReading && reading.drop_rate !== null && reading.drop_rate !== undefined
                   ? Number(reading.drop_rate).toFixed(1)
                   : null;
+                const liveDropCount = hasReading && reading.drop_count !== null && reading.drop_count !== undefined
+                  ? reading.drop_count
+                  : null;
                 const isStopped = hasReading
                   ? (reading.device_status === 'Stopped' || Number(reading.drop_rate) === 0)
                   : !p.is_active;
@@ -242,23 +245,35 @@ export default function NurseDashboard() {
                     </div>
                     
                     <div className="p-5 flex-1 flex flex-col gap-4 justify-between">
-                      <div className="grid grid-cols-2 gap-2 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/50">
+                      <div className="grid grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/50">
                         <div>
-                          <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Live Drip Rate</p>
-                          <p className="font-mono text-lg font-bold text-saline mt-0.5">
+                          <p className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Live Rate</p>
+                          <p className="font-mono text-sm sm:text-base font-bold text-saline mt-0.5">
                             {liveDropRate !== null ? (
                               <>
-                                {liveDropRate} <span className="text-xs text-slate-400 font-normal">gtt/min</span>
+                                {liveDropRate} <span className="text-[10px] text-slate-400 font-normal">gtt/m</span>
                               </>
                             ) : (
-                              <span className="text-xs text-slate-400 font-normal italic">Awaiting sensor...</span>
+                              <span className="text-[10px] text-slate-400 font-normal italic">Awaiting</span>
                             )}
                           </p>
                         </div>
                         <div>
-                          <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Prescribed Target</p>
-                          <p className="font-mono text-lg font-bold text-ink dark:text-white mt-0.5">
-                            {targetRate} <span className="text-xs text-slate-400 font-normal">gtt/min</span>
+                          <p className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Drop Count</p>
+                          <p className="font-mono text-sm sm:text-base font-bold text-sky-500 mt-0.5">
+                            {liveDropCount !== null ? (
+                              <>
+                                {liveDropCount} <span className="text-[10px] text-slate-400 font-normal">drops</span>
+                              </>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 font-normal italic">—</span>
+                            )}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Target</p>
+                          <p className="font-mono text-sm sm:text-base font-bold text-ink dark:text-white mt-0.5">
+                            {targetRate} <span className="text-[10px] text-slate-400 font-normal">gtt/m</span>
                           </p>
                         </div>
                       </div>

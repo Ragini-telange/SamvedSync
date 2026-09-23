@@ -89,6 +89,9 @@ export default function DoctorPatientBoxes({
             const liveDropRate = hasReading && reading.drop_rate !== null && reading.drop_rate !== undefined 
               ? Number(reading.drop_rate).toFixed(1) 
               : null;
+            const liveDropCount = hasReading && reading.drop_count !== null && reading.drop_count !== undefined 
+              ? reading.drop_count 
+              : null;
             const isStopped = hasReading 
               ? (reading.device_status === 'Stopped' || Number(reading.drop_rate) === 0) 
               : !p.is_active;
@@ -147,25 +150,38 @@ export default function DoctorPatientBoxes({
 
                   {/* Telemetry Metrics Grid (Strictly Real Sensor Hardware Telemetry) */}
                   <div className="space-y-3 mb-6">
-                    {/* Rate Comparison Box */}
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/50">
-                        <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Live Drip Rate</span>
-                        <span className="font-mono font-bold text-saline text-base mt-0.5 block">
+                    {/* Rate & Drop Count Comparison Box */}
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-2xl border border-slate-100 dark:border-slate-700/50">
+                        <span className="text-slate-400 block text-[9px] uppercase font-bold tracking-wider">Live Rate</span>
+                        <span className="font-mono font-bold text-saline text-sm sm:text-base mt-0.5 block">
                           {liveDropRate !== null ? (
                             <>
-                              {liveDropRate} <span className="text-xs text-slate-400 font-normal">gtt/min</span>
+                              {liveDropRate} <span className="text-[10px] text-slate-400 font-normal">gtt/m</span>
                             </>
                           ) : (
-                            <span className="text-xs text-slate-400 font-normal italic">Awaiting sensor...</span>
+                            <span className="text-[10px] text-slate-400 font-normal italic">Awaiting</span>
                           )}
                         </span>
                       </div>
 
-                      <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/50">
-                        <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Prescribed Target</span>
-                        <span className="font-mono font-bold text-ink dark:text-white text-base mt-0.5 block">
-                          {targetRate} <span className="text-xs text-slate-400 font-normal">gtt/min</span>
+                      <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-2xl border border-slate-100 dark:border-slate-700/50">
+                        <span className="text-slate-400 block text-[9px] uppercase font-bold tracking-wider">Drop Count</span>
+                        <span className="font-mono font-bold text-sky-500 text-sm sm:text-base mt-0.5 block">
+                          {liveDropCount !== null ? (
+                            <>
+                              {liveDropCount} <span className="text-[10px] text-slate-400 font-normal">drops</span>
+                            </>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-normal italic">—</span>
+                          )}
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-2xl border border-slate-100 dark:border-slate-700/50">
+                        <span className="text-slate-400 block text-[9px] uppercase font-bold tracking-wider">Target</span>
+                        <span className="font-mono font-bold text-ink dark:text-white text-sm sm:text-base mt-0.5 block">
+                          {targetRate} <span className="text-[10px] text-slate-400 font-normal">gtt/m</span>
                         </span>
                       </div>
                     </div>

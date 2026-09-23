@@ -20,6 +20,9 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [liveData, setLiveData] = useState(null);
+  const [telemetryFeeds, setTelemetryFeeds] = useState([]);
+  const [graphMode, setGraphMode] = useState('rate'); // 'rate' | 'count' | 'both'
+  const [hoveredPoint, setHoveredPoint] = useState(null);
 
   // Direct Staff Messaging State
   const [directiveText, setDirectiveText] = useState('');
@@ -64,6 +67,7 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
         const live = await syncPatientThingSpeakData(patient);
         if (live && mounted) {
           setLiveData(live);
+          if (live.feeds && live.feeds.length > 0) setTelemetryFeeds(live.feeds);
         }
       } catch (err) {
         console.warn('Direct ThingSpeak sync notice:', err.message);
@@ -82,6 +86,7 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
         const live = await syncPatientThingSpeakData(patient);
         if (live && mounted) {
           setLiveData(live);
+          if (live.feeds && live.feeds.length > 0) setTelemetryFeeds(live.feeds);
         }
         if (mounted) await fetchData();
       } catch (e) {
@@ -99,7 +104,10 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
     setRefreshing(true);
     try {
       const live = await syncPatientThingSpeakData(patient);
-      if (live) setLiveData(live);
+      if (live) {
+        setLiveData(live);
+        if (live.feeds && live.feeds.length > 0) setTelemetryFeeds(live.feeds);
+      }
       await fetchData();
       if (showToast) showToast('Hardware Telemetry Synced', 'Latest sensor readings fetched from ThingSpeak.');
     } finally {
@@ -158,6 +166,10 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
   const currentDripRate = liveData?.drip_rate !== undefined && liveData?.drip_rate !== null
     ? Number(liveData.drip_rate).toFixed(1)
     : (latestReading?.drop_rate !== undefined && latestReading.drop_rate !== null ? Number(latestReading.drop_rate).toFixed(1) : null);
+
+  const currentDropCount = liveData?.drop_count !== undefined && liveData?.drop_count !== null
+    ? liveData.drop_count
+    : (latestReading?.drop_count !== undefined && latestReading.drop_count !== null ? latestReading.drop_count : null);
 
   const currentIvLevel = liveData?.iv_level !== undefined && liveData?.iv_level !== null
     ? Number(liveData.iv_level)
@@ -263,74 +275,93 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
         </div>
       </div>
 
-      {/* 4 Telemetry Status Cards (Matching Specification) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* 5 Real-Time Telemetry Status Cards (Matching Hardware Sensors) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Metric 1: Drip Rate */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col justify-between">
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-saline uppercase tracking-wider mb-2">
             <Droplet className="w-4 h-4" /> DRIP RATE
           </div>
           <div>
-            <div className="text-4xl font-bold font-mono text-ink dark:text-white">
+            <div className="text-3xl sm:text-4xl font-bold font-mono text-ink dark:text-white">
               {currentDripRate !== null ? (
                 currentDripRate
               ) : (
-                <span className="text-xl text-slate-400 font-normal italic">Awaiting data...</span>
+                <span className="text-lg text-slate-400 font-normal italic">Awaiting...</span>
               )}
             </div>
-            <div className="text-xs text-slate-400 mt-1">drops per minute (gtt/min)</div>
+            <div className="text-xs text-slate-400 mt-1">drops/min (gtt/min)</div>
           </div>
           <div className="text-[11px] text-slate-500 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 font-mono">
-            Prescribed: {targetGttMin} gtt/min ({patient.prescribed_rate_ml_hr || 100} mL/hr)
+            Prescribed: {targetGttMin} gtt/min
           </div>
         </div>
 
-        {/* Metric 2: Flow Status */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col justify-between">
+        {/* Metric 2: Total Drop Count */}
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-sky-500 uppercase tracking-wider mb-2">
+            <Activity className="w-4 h-4" /> DROP COUNT
+          </div>
+          <div>
+            <div className="text-3xl sm:text-4xl font-bold font-mono text-ink dark:text-white">
+              {currentDropCount !== null ? (
+                currentDropCount
+              ) : (
+                <span className="text-lg text-slate-400 font-normal italic">Awaiting...</span>
+              )}
+            </div>
+            <div className="text-xs text-slate-400 mt-1">total drops counted</div>
+          </div>
+          <div className="text-[11px] text-slate-500 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 font-mono">
+            IR Sensor (Field 1)
+          </div>
+        </div>
+
+        {/* Metric 3: Flow Status */}
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">
             <CheckCircle className="w-4 h-4" /> FLOW STATUS
           </div>
           <div>
-            <div className={`text-3xl font-bold font-display ${isFlowStopped ? 'text-rose-600' : 'text-emerald-600'}`}>
+            <div className={`text-2xl sm:text-3xl font-bold font-display ${isFlowStopped ? 'text-rose-600' : 'text-emerald-600'}`}>
               {isFlowStopped ? 'Stopped' : 'Normal'}
             </div>
             <div className="text-xs text-slate-400 mt-1">IR Drop Sensor (Field 2)</div>
           </div>
           <div className="text-[11px] text-slate-500 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-            {isFlowStopped ? 'Line Occlusion / Valve Closed' : 'Continuous Laminar Flow'}
+            {isFlowStopped ? 'Line Occlusion / Closed' : 'Continuous Laminar Flow'}
           </div>
         </div>
 
-        {/* Metric 3: Blood Backflow */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col justify-between">
+        {/* Metric 4: Blood Backflow */}
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-rose-500 uppercase tracking-wider mb-2">
             <Heart className="w-4 h-4 fill-current" /> BLOOD BACKFLOW
           </div>
           <div>
-            <div className={`text-2xl font-bold font-display ${isBackflow ? 'text-rose-600 animate-pulse' : 'text-emerald-600'}`}>
-              {isBackflow ? 'DETECTED!' : 'Normal (No Backflow)'}
+            <div className={`text-xl sm:text-2xl font-bold font-display ${isBackflow ? 'text-rose-600 animate-pulse' : 'text-emerald-600'}`}>
+              {isBackflow ? 'DETECTED!' : 'Normal (Clear)'}
             </div>
-            <div className="text-xs text-slate-400 mt-1">TCS3200 Optical Sensor (Field 3)</div>
+            <div className="text-xs text-slate-400 mt-1">TCS3200 Optical Sensor</div>
           </div>
           <div className="text-[11px] text-slate-500 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-            {isBackflow ? 'Immediate nursing check required' : 'Infusion line clear of blood'}
+            {isBackflow ? 'Immediate check required' : 'Infusion line clear of blood'}
           </div>
         </div>
 
-        {/* Metric 4: IV Fluid Level */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col justify-between">
+        {/* Metric 5: IV Fluid Level */}
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 text-center shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-blue-500 uppercase tracking-wider mb-2">
             <Activity className="w-4 h-4" /> IV FLUID LEVEL
           </div>
           <div>
-            <div className="text-4xl font-bold font-mono text-ink dark:text-white">
+            <div className="text-3xl sm:text-4xl font-bold font-mono text-ink dark:text-white">
               {currentIvLevel !== null ? `${Math.round(currentIvLevel)}%` : '—'}
             </div>
             <div className="text-xs text-slate-400 mt-1">
               {currentVolumeRemaining !== null ? `≈ ${currentVolumeRemaining} mL remaining` : 'Volume level not recorded'}
             </div>
           </div>
-          {/* Progress visual bar */}
           <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
             <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
               <div 
@@ -344,85 +375,212 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
         </div>
       </div>
 
-      {/* Main Grid: Drip Rate History Graph & Prototype Risk Analysis */}
+      {/* Main Grid: Drip Rate & Drop Count History Graph & Prototype Risk Analysis */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Drip Rate History Graph (2 Cols) */}
+        {/* Drip Rate & Drop Count Telemetry Graph (2 Cols) */}
         <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="font-bold text-ink dark:text-white text-base flex items-center gap-2 font-display">
-                <Activity className="w-4 h-4 text-blue-500" /> Drip Rate History (drops/min)
+                <Activity className="w-4 h-4 text-blue-500" />
+                {graphMode === 'rate' ? 'Drip Rate History (drops/min)' : graphMode === 'count' ? 'Cumulative Drop Count History (drops)' : 'Hardware Telemetry (Rate & Count)'}
               </h3>
-              <p className="text-xs text-slate-400 mt-0.5">Real-time hardware telemetry curve from ThingSpeak</p>
+              <p className="text-xs text-slate-400 mt-0.5">Real-time hardware telemetry curve from ESP32 & ThingSpeak</p>
             </div>
-            <span className="text-xs font-mono font-semibold text-slate-500 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-xl">
-              Target: {targetGttMin} gtt/min
-            </span>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setGraphMode('rate')}
+                  className={`px-3 py-1 rounded-lg transition-all ${
+                    graphMode === 'rate' ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500 hover:text-ink dark:hover:text-white'
+                  }`}
+                >
+                  Drip Rate
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGraphMode('count')}
+                  className={`px-3 py-1 rounded-lg transition-all ${
+                    graphMode === 'count' ? 'bg-white dark:bg-slate-700 text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-ink dark:hover:text-white'
+                  }`}
+                >
+                  Drop Count
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGraphMode('both')}
+                  className={`px-3 py-1 rounded-lg transition-all ${
+                    graphMode === 'both' ? 'bg-white dark:bg-slate-700 text-purple-600 shadow-sm' : 'text-slate-500 hover:text-ink dark:hover:text-white'
+                  }`}
+                >
+                  Combined
+                </button>
+              </div>
+
+              <span className="text-xs font-mono font-semibold text-slate-500 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                Target: {targetGttMin} gtt/min
+              </span>
+            </div>
           </div>
 
-          {/* SVG Drip History Chart with Dynamic Coordinates */}
-          <div className="h-64 w-full relative pt-2">
-            {readings.length === 0 ? (
-              <div className="w-full h-full flex flex-col items-center justify-center text-xs text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
-                <Activity className="w-6 h-6 text-slate-300 dark:text-slate-600 mb-2 animate-pulse" />
-                Awaiting hardware transmission from ThingSpeak Channel {patient.thingspeak_channel_id || '3249576'}...
+          {/* Legend and Active Hover Detail */}
+          <div className="flex items-center justify-between text-xs text-slate-500 border-b border-slate-100 dark:border-slate-800 pb-2">
+            <div className="flex items-center gap-4 flex-wrap">
+              {(graphMode === 'rate' || graphMode === 'both') && (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-1 bg-blue-600 rounded-full inline-block" />
+                  <span className="font-semibold text-blue-600">Drip Rate (gtt/min)</span>
+                </div>
+              )}
+              {(graphMode === 'count' || graphMode === 'both') && (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-1 bg-emerald-500 rounded-full inline-block" />
+                  <span className="font-semibold text-emerald-600">Drop Count (drops)</span>
+                </div>
+              )}
+              {(graphMode === 'rate' || graphMode === 'both') && (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-4 h-0.5 border-t-2 border-dashed border-emerald-500 inline-block" />
+                  <span className="text-slate-400">Target ({targetGttMin})</span>
+                </div>
+              )}
+            </div>
+
+            {hoveredPoint ? (
+              <div className="font-mono text-xs font-semibold text-ink dark:text-white bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
+                {hoveredPoint.label}
               </div>
             ) : (
-              <svg viewBox="0 0 1000 250" className="w-full h-full">
-                {/* Horizontal Grid lines */}
-                <line x1="40" y1="40" x2="980" y2="40" stroke="rgba(200,200,200,0.15)" strokeWidth="1" strokeDasharray="4 4" />
-                <line x1="40" y1="90" x2="980" y2="90" stroke="rgba(200,200,200,0.15)" strokeWidth="1" strokeDasharray="4 4" />
-                <line x1="40" y1="140" x2="980" y2="140" stroke="rgba(200,200,200,0.15)" strokeWidth="1" strokeDasharray="4 4" />
-                <line x1="40" y1="190" x2="980" y2="190" stroke="rgba(200,200,200,0.15)" strokeWidth="1" strokeDasharray="4 4" />
+              <div className="text-[11px] text-slate-400 italic">Hover points for readings</div>
+            )}
+          </div>
 
-                {/* Y-axis labels */}
-                <text x="10" y="45" fill="#94A3B8" fontSize="11" fontFamily="monospace">60</text>
-                <text x="10" y="95" fill="#94A3B8" fontSize="11" fontFamily="monospace">40</text>
-                <text x="10" y="145" fill="#94A3B8" fontSize="11" fontFamily="monospace">20</text>
-                <text x="10" y="195" fill="#94A3B8" fontSize="11" fontFamily="monospace">0</text>
+          {/* SVG Telemetry Chart with Dynamic Coordinates */}
+          <div className="h-64 w-full relative pt-2">
+            {(() => {
+              // Combine real ThingSpeak telemetry feeds with readings
+              const pts = (telemetryFeeds && telemetryFeeds.length > 0)
+                ? telemetryFeeds.slice(-20)
+                : readings.slice(-20).map(r => ({
+                    entry_id: r.id,
+                    drop_count: Number(r.drop_count) || 0,
+                    drip_rate: Number(r.drop_rate) || 0,
+                    created_at: r.recorded_at,
+                    flow_status: r.device_status === 'Stopped' ? 0 : 1
+                  }));
 
-                {/* Target Prescribed Rate Reference Line (Green dashed) */}
-                {(() => {
-                  const targetY = Math.max(40, Math.min(190, 190 - (Number(targetGttMin) / 60) * 150));
-                  return (
+              if (pts.length === 0) {
+                return (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-xs text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
+                    <Activity className="w-6 h-6 text-slate-300 dark:text-slate-600 mb-2 animate-pulse" />
+                    Awaiting hardware transmission from ThingSpeak Channel {patient.thingspeak_channel_id || '3249576'}...
+                  </div>
+                );
+              }
+
+              // Dynamic scale calculations
+              const maxRateVal = Math.max(60, Number(targetGttMin) + 10, ...pts.map(p => Number(p.drip_rate) || 0));
+              const maxCountVal = Math.max(50, ...pts.map(p => Number(p.drop_count) || 0) * 1.15);
+
+              const stepX = 920 / Math.max(1, pts.length - 1);
+
+              // Coordinates for Rate curve
+              const rateCoords = pts.map((p, i) => {
+                const x = 50 + i * stepX;
+                const val = Number(p.drip_rate) || 0;
+                const y = Math.max(30, Math.min(195, 195 - (val / maxRateVal) * 155));
+                return { x, y, val, point: p };
+              });
+
+              // Coordinates for Count curve
+              const countCoords = pts.map((p, i) => {
+                const x = 50 + i * stepX;
+                const val = Number(p.drop_count) || 0;
+                const y = Math.max(30, Math.min(195, 195 - (val / maxCountVal) * 155));
+                return { x, y, val, point: p };
+              });
+
+              const ratePathD = rateCoords.reduce((acc, pt, i) => i === 0 ? `M ${pt.x} ${pt.y}` : `${acc} L ${pt.x} ${pt.y}`, '');
+              const countPathD = countCoords.reduce((acc, pt, i) => i === 0 ? `M ${pt.x} ${pt.y}` : `${acc} L ${pt.x} ${pt.y}`, '');
+
+              // Target rate reference line Y
+              const targetY = Math.max(30, Math.min(195, 195 - (Number(targetGttMin) / maxRateVal) * 155));
+
+              // Left Y-axis labels
+              const axisMax = graphMode === 'count' ? Math.round(maxCountVal) : Math.round(maxRateVal);
+              const axisMid1 = Math.round(axisMax * 0.66);
+              const axisMid2 = Math.round(axisMax * 0.33);
+
+              return (
+                <svg viewBox="0 0 1000 240" className="w-full h-full">
+                  {/* Grid lines */}
+                  <line x1="50" y1="40" x2="970" y2="40" stroke="rgba(200,200,200,0.15)" strokeWidth="1" strokeDasharray="4 4" />
+                  <line x1="50" y1="90" x2="970" y2="90" stroke="rgba(200,200,200,0.15)" strokeWidth="1" strokeDasharray="4 4" />
+                  <line x1="50" y1="140" x2="970" y2="140" stroke="rgba(200,200,200,0.15)" strokeWidth="1" strokeDasharray="4 4" />
+                  <line x1="50" y1="195" x2="970" y2="195" stroke="rgba(200,200,200,0.15)" strokeWidth="1" strokeDasharray="4 4" />
+
+                  {/* Y-axis labels */}
+                  <text x="10" y="45" fill="#94A3B8" fontSize="11" fontFamily="monospace">{axisMax}</text>
+                  <text x="10" y="95" fill="#94A3B8" fontSize="11" fontFamily="monospace">{axisMid1}</text>
+                  <text x="10" y="145" fill="#94A3B8" fontSize="11" fontFamily="monospace">{axisMid2}</text>
+                  <text x="10" y="198" fill="#94A3B8" fontSize="11" fontFamily="monospace">0</text>
+
+                  {/* Target line (only when showing rate or both) */}
+                  {(graphMode === 'rate' || graphMode === 'both') && (
                     <line 
-                      x1="40" y1={targetY} x2="980" y2={targetY} 
-                      stroke="#10B981" strokeWidth="1.5" strokeDasharray="6 4" opacity="0.6" 
+                      x1="50" y1={targetY} x2="970" y2={targetY} 
+                      stroke="#10B981" strokeWidth="1.5" strokeDasharray="6 4" opacity="0.7" 
                     />
-                  );
-                })()}
+                  )}
 
-                {/* Data Points Curve */}
-                {(() => {
-                  const pts = readings.slice(-15);
-                  if (pts.length === 0) return null;
-
-                  const stepX = 940 / Math.max(1, pts.length - 1);
-                  const coords = pts.map((p, i) => {
-                    const x = 40 + i * stepX;
-                    const val = Number(p.drop_rate) || 0;
-                    const y = Math.max(30, Math.min(190, 190 - (val / 60) * 150));
-                    return { x, y, val, time: p.recorded_at };
-                  });
-
-                  const pathD = coords.reduce((acc, pt, i) => i === 0 ? `M ${pt.x} ${pt.y}` : `${acc} L ${pt.x} ${pt.y}`, '');
-
-                  return (
+                  {/* Rate Curve */}
+                  {(graphMode === 'rate' || graphMode === 'both') && (
                     <>
-                      <path d={pathD} fill="none" stroke="#2563EB" strokeWidth="3" strokeLinecap="round" />
-                      {coords.map((c, i) => (
-                        <g key={i}>
-                          <circle cx={c.x} cy={c.y} r="4" fill="#2563EB" className="hover:scale-150 transition-transform" />
-                          {i === coords.length - 1 && (
-                            <circle cx={c.x} cy={c.y} r="7" fill="none" stroke="#2563EB" strokeWidth="2" className="animate-ping" />
+                      <path d={ratePathD} fill="none" stroke="#2563EB" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                      {rateCoords.map((c, i) => (
+                        <g 
+                          key={`rate-${i}`} 
+                          className="cursor-pointer"
+                          onMouseEnter={() => setHoveredPoint({
+                            label: `Entry #${c.point.entry_id} • Drip Rate: ${c.val.toFixed(1)} gtt/min • Time: ${new Date(c.point.created_at).toLocaleTimeString()}`
+                          })}
+                          onMouseLeave={() => setHoveredPoint(null)}
+                        >
+                          <circle cx={c.x} cy={c.y} r="5" fill="#2563EB" className="transition-transform hover:scale-150" />
+                          {i === rateCoords.length - 1 && (
+                            <circle cx={c.x} cy={c.y} r="8" fill="none" stroke="#2563EB" strokeWidth="2" className="animate-ping" />
                           )}
                         </g>
                       ))}
                     </>
-                  );
-                })()}
-              </svg>
-            )}
+                  )}
+
+                  {/* Count Curve */}
+                  {(graphMode === 'count' || graphMode === 'both') && (
+                    <>
+                      <path d={countPathD} fill="none" stroke="#10B981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                      {countCoords.map((c, i) => (
+                        <g 
+                          key={`count-${i}`} 
+                          className="cursor-pointer"
+                          onMouseEnter={() => setHoveredPoint({
+                            label: `Entry #${c.point.entry_id} • Drop Count: ${c.val} drops • Time: ${new Date(c.point.created_at).toLocaleTimeString()}`
+                          })}
+                          onMouseLeave={() => setHoveredPoint(null)}
+                        >
+                          <circle cx={c.x} cy={c.y} r="5" fill="#10B981" className="transition-transform hover:scale-150" />
+                          {i === countCoords.length - 1 && (
+                            <circle cx={c.x} cy={c.y} r="8" fill="none" stroke="#10B981" strokeWidth="2" className="animate-ping" />
+                          )}
+                        </g>
+                      ))}
+                    </>
+                  )}
+                </svg>
+              );
+            })()}
           </div>
         </div>
 

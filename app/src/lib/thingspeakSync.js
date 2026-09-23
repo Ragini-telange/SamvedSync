@@ -33,7 +33,7 @@ const lastAlertTimestampMap = new Map(); // key: `${patientId}_${alertType}` -> 
 /**
  * Fetch latest readings directly from ThingSpeak
  */
-export async function fetchThingSpeakFeeds(channelId = DEFAULT_CHANNEL_ID, readKey = DEFAULT_READ_KEY, results = 15) {
+export async function fetchThingSpeakFeeds(channelId = DEFAULT_CHANNEL_ID, readKey = DEFAULT_READ_KEY, results = 20) {
   const cleanChannel = String(channelId || DEFAULT_CHANNEL_ID).trim();
   const cleanKey = String(readKey || DEFAULT_READ_KEY).trim();
   
@@ -47,18 +47,42 @@ export async function fetchThingSpeakFeeds(channelId = DEFAULT_CHANNEL_ID, readK
     const data = await res.json();
     const feeds = data.feeds || [];
 
-    // Parse feeds into typed telemetric readings
+    // Parse feeds into typed telemetric readings matching hardware firmware:
+    // - Field 1: totalDrops (Total Drop Count from IR beam sensor, e.g. 44)
+    // - Field 2: alert (0 = Normal Flow, 1 = Occlusion / Alert)
+    // - Field 3: dpm (Drip Rate in drops/min, e.g. 22.0 gtt/min)
+    // - Field 4: reverseFlowAlert (1 = Color sensor backflow, 0 = Normal)
     return feeds.map((feed) => {
-      const dripRate = parseFloat(feed.field1);
-      const flowStatus = parseInt(feed.field2, 10);
-      const bloodValue = parseFloat(feed.field3);
+      const rawField1 = parseFloat(feed.field1);
+      const rawField3 = parseFloat(feed.field3);
+      const rawField4 = feed.field4 !== undefined && feed.field4 !== null ? parseInt(feed.field4, 10) : null;
+
+      let dropCount = 0;
+      let dripRate = 0;
+
+      // If field3 is present and valid, hardware puts dpm in field3 and totalDrops in field1
+      if (!isNaN(rawField3)) {
+        dripRate = Math.max(0, rawField3);
+        dropCount = !isNaN(rawField1) ? Math.max(0, Math.round(rawField1)) : feed.entry_id;
+      } else {
+        // Fallback for channels that supply drip rate directly in field1
+        dripRate = !isNaN(rawField1) ? Math.max(0, rawField1) : 0;
+        dropCount = feed.entry_id;
+      }
+
+      // Blood backflow is strictly detected by field4 (or explicit reverse flag), NEVER from drip rate field3
+      const isReverseFlow = rawField4 !== null ? rawField4 === 1 : false;
+
+      // Flow status: 1 = Normal / Flowing, 0 = Stopped
+      const flowStatus = dripRate > 0 ? 1 : 0;
 
       return {
         entry_id: feed.entry_id,
         created_at: feed.created_at,
-        drip_rate: isNaN(dripRate) ? 0 : Math.max(0, dripRate),
-        flow_status: isNaN(flowStatus) ? 1 : flowStatus,
-        reverse_flow: !isNaN(bloodValue) && bloodValue > 0.05,
+        drop_count: dropCount,
+        drip_rate: dripRate,
+        flow_status: flowStatus,
+        reverse_flow: isReverseFlow,
         battery_level: 95.0,
         raw: feed
       };
@@ -73,7 +97,7 @@ export async function fetchThingSpeakFeeds(channelId = DEFAULT_CHANNEL_ID, readK
  * Fetch the single latest hardware reading for a patient
  */
 export async function fetchLatestHardwareReading(channelId, readKey) {
-  const feeds = await fetchThingSpeakFeeds(channelId, readKey, 1);
+  const feeds = await fetchThingSpeakFeeds(channelId, readKey, 20);
   return feeds.length > 0 ? feeds[feeds.length - 1] : null;
 }
 
@@ -86,16 +110,12 @@ export async function syncPatientThingSpeakData(patient) {
   const channelId = patient.thingspeak_channel_id || DEFAULT_CHANNEL_ID;
   const readKey = patient.thingspeak_read_key || DEFAULT_READ_KEY;
 
-  const latest = await fetchLatestHardwareReading(channelId, readKey);
-  if (!latest) {
+  const feeds = await fetchThingSpeakFeeds(channelId, readKey, 20);
+  if (!feeds || feeds.length === 0) {
     return null;
   }
 
-  // Check if this hardware entry was already saved to Supabase
-  const patientKey = `${patient.id}_${channelId}`;
-  if (lastProcessedEntryMap.get(patientKey) === latest.entry_id && lastProcessedDataMap.has(patientKey)) {
-    return lastProcessedDataMap.get(patientKey);
-  }
+  const latest = feeds[feeds.length - 1];
 
   // Target drip rate calculation: (prescribed_rate_ml_hr * drop_factor) / 60
   const targetRate = patient.drop_factor && patient.prescribed_rate_ml_hr
@@ -133,37 +153,42 @@ export async function syncPatientThingSpeakData(patient) {
     recentAlertsCount: 0
   });
 
-  // 1. Insert reading into Supabase `readings` table
-  try {
-    await supabase.from('readings').insert({
-      patient_id: patient.id,
-      iv_level: Math.round(currentIvLevel * 10) / 10,
-      drop_rate: latest.drip_rate,
-      drop_count: latest.entry_id,
-      reverse_flow: latest.reverse_flow,
-      battery_level: latest.battery_level,
-      device_status: latest.flow_status === 1 ? 'Normal' : 'Stopped',
-      risk_score: riskResult.score,
-      risk_label: riskResult.level,
-      ai_explain: riskResult.reasons.join('; '),
-      recorded_at: latest.created_at || new Date().toISOString()
-    });
-  } catch (err) {
-    console.warn('Reading insertion note:', err.message);
-  }
+  const patientKey = `${patient.id}_${channelId}`;
+  const isNewEntry = lastProcessedEntryMap.get(patientKey) !== latest.entry_id;
 
-  // 2. Evaluate Alert Conditions with Cooldown
-  await evaluateAndGenerateAlerts(patient, latest, currentIvLevel, targetRate);
+  if (isNewEntry) {
+    // 1. Insert reading into Supabase `readings` table with correct drop_rate AND drop_count
+    try {
+      await supabase.from('readings').insert({
+        patient_id: patient.id,
+        iv_level: Math.round(currentIvLevel * 10) / 10,
+        drop_rate: latest.drip_rate,
+        drop_count: latest.drop_count,
+        reverse_flow: latest.reverse_flow,
+        battery_level: latest.battery_level,
+        device_status: latest.flow_status === 1 ? 'Normal' : 'Stopped',
+        risk_score: riskResult.score,
+        risk_label: riskResult.level,
+        ai_explain: riskResult.reasons.join('; '),
+        recorded_at: latest.created_at || new Date().toISOString()
+      });
+    } catch (err) {
+      console.warn('Reading insertion note:', err.message);
+    }
+
+    // 2. Evaluate Alert Conditions with Cooldown
+    await evaluateAndGenerateAlerts(patient, latest, currentIvLevel, targetRate);
+    lastProcessedEntryMap.set(patientKey, latest.entry_id);
+  }
 
   const processedData = {
     ...latest,
+    feeds,
     iv_level: Math.round(currentIvLevel * 10) / 10,
     risk: riskResult
   };
 
-  lastProcessedEntryMap.set(patientKey, latest.entry_id);
   lastProcessedDataMap.set(patientKey, processedData);
-
   return processedData;
 }
 

@@ -28,7 +28,7 @@ Adafruit_TCS34725 tcs =
 // ================= SETTINGS =================
 // increase this if one drop still becomes 2 counts
 const unsigned long DROP_LOCKOUT_US    = 80000;   // 80 ms
-const unsigned long NO_DRIP_TIMEOUT_MS = 3000;    // alert if no drip for 3 sec
+const unsigned long NO_DRIP_TIMEOUT_MS = 6000;    // alert if no drip for 6 sec (normal rate margin)
 
 // ================= DROP VARIABLES =================
 volatile unsigned long dropCount = 0;
@@ -167,6 +167,7 @@ void uploadThingSpeak(unsigned long totalDrops, bool alert, float dpm) {
   ThingSpeak.setField(1, (long)totalDrops);
   ThingSpeak.setField(2, alert ? 1 : 0);
   ThingSpeak.setField(3, dpm);
+  ThingSpeak.setField(4, reverseFlowAlert ? 1 : 0);
 
   int response = ThingSpeak.writeFields(channelID, writeAPIKey);
 
