@@ -285,7 +285,7 @@ export function PatientsSection({ patients, nurses = [], doctors = [], loading, 
                       <td className="px-5 py-4 font-mono text-xs text-slate-400">{idx + 1}</td>
                       <td className="px-5 py-4">
                         <div className="font-bold text-ink dark:text-white text-sm">{p.name}</div>
-                        <div className="text-[11px] font-mono text-slate-400">ID: {p.id.slice(0, 8)}</div>
+                        <div className="text-[11px] font-mono text-slate-400">ID: {p.id ? String(p.id).slice(0, 8) : '—'}</div>
                       </td>
                       <td className="px-5 py-4 text-xs text-slate-600 dark:text-slate-300">
                         {p.age ? `${p.age}y` : '—'} · <span className="capitalize">{p.gender || 'Not set'}</span>

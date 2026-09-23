@@ -138,7 +138,7 @@ export default function DoctorPatientBoxes({
                         )}
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
-                        ID: {p.id.slice(0, 8)} · Bed {p.bed_number} ({p.ward || 'ICU'})
+                        ID: {p.id ? String(p.id).slice(0, 8) : '—'} · Bed {p.bed_number} ({p.ward || 'ICU'})
                       </p>
                     </div>
 

@@ -44,6 +44,17 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
   const docObj = doctors.find(d => patient?.doctor_patients?.some(dp => dp.doctor_id === d.id) || d.id === patient?.assigned_doctor_id);
   const doctorName = patient?.doctors?.profiles?.name || docObj?.profiles?.name || 'Not Assigned';
 
+  if (!patient) {
+    return (
+      <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 text-center">
+        <p className="text-slate-400">No patient details available.</p>
+        <button onClick={onBack} className="mt-4 px-4 py-2 bg-saline text-white rounded-xl text-xs font-semibold">
+          Back to Dashboard
+        </button>
+      </div>
+    );
+  }
+
   const fetchData = useCallback(async () => {
     if (!patient?.id) return;
     const [r, a, t] = await Promise.all([
@@ -132,20 +143,20 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
     let receiverId = null;
     let receiverRole = 'nurse';
 
-    if (profile.role === 'doctor') {
+    if (profile?.role === 'doctor') {
       receiverId = nurseProfileId;
       receiverRole = 'nurse';
-    } else if (profile.role === 'nurse') {
+    } else if (profile?.role === 'nurse') {
       receiverId = docObj?.profile_id || null;
       receiverRole = 'doctor';
     }
 
     const { error } = await sendMessage({
-      senderId: profile.id,
-      senderRole: profile.role,
+      senderId: profile?.id,
+      senderRole: profile?.role || 'staff',
       receiverId,
       receiverRole,
-      patientId: patient.id,
+      patientId: patient?.id,
       body: directiveText.trim()
     });
 
@@ -245,17 +256,17 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
         <div>
           <div className="flex items-center gap-3 mb-1">
             <h2 className="text-2xl sm:text-3xl font-bold text-ink dark:text-white font-display">
-              {patient.name}
+              {patient?.name || 'Patient Details'}
             </h2>
             <span className="font-mono text-xs text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
-              ID: {patient.id.slice(0, 8)}
+              ID: {patient?.id ? String(patient.id).slice(0, 8) : '—'}
             </span>
           </div>
           <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
-            Bed <span className="font-bold text-ink dark:text-white font-mono">{patient.bed_number}</span> · {patient.ward || 'ICU Ward'} · Age: {patient.age ? `${patient.age}y` : 'Not specified'} · Gender: {patient.gender || 'Not specified'}
+            Bed <span className="font-bold text-ink dark:text-white font-mono">{patient?.bed_number || '—'}</span> · {patient?.ward || 'ICU Ward'} · Age: {patient?.age ? `${patient.age}y` : 'Not specified'} · Gender: {patient?.gender || 'Not specified'}
           </p>
           <div className="text-xs text-slate-500 mt-2 flex flex-wrap gap-4">
-            <span>Diagnosis: <strong className="text-ink dark:text-white">{patient.diagnosis || 'Observation'}</strong></span>
+            <span>Diagnosis: <strong className="text-ink dark:text-white">{patient?.diagnosis || 'Observation'}</strong></span>
             <span>Assigned Nurse: <strong className="text-saline">{nurseName}</strong></span>
             <span>Attending Doctor: <strong className="text-blue-500">{doctorName}</strong></span>
           </div>
@@ -270,7 +281,7 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
             {isBackflow ? 'CRITICAL BACKFLOW' : isFlowStopped ? 'FLOW STOPPED' : 'NORMAL INFUSION'}
           </span>
           <span className="text-[11px] text-slate-400">
-            Admitted: {new Date(patient.admitted_at).toLocaleDateString()}
+            Admitted: {patient?.admitted_at ? new Date(patient.admitted_at).toLocaleDateString() : 'Active'}
           </span>
         </div>
       </div>
@@ -475,14 +486,14 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
                 return (
                   <div className="w-full h-full flex flex-col items-center justify-center text-xs text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
                     <Activity className="w-6 h-6 text-slate-300 dark:text-slate-600 mb-2 animate-pulse" />
-                    Awaiting hardware transmission from ThingSpeak Channel {patient.thingspeak_channel_id || '3249576'}...
+                    Awaiting hardware transmission from ThingSpeak Channel {patient?.thingspeak_channel_id || '3249576'}...
                   </div>
                 );
               }
 
               // Dynamic scale calculations
-              const maxRateVal = Math.max(60, Number(targetGttMin) + 10, ...pts.map(p => Number(p.drip_rate) || 0));
-              const maxCountVal = Math.max(50, ...pts.map(p => Number(p.drop_count) || 0) * 1.15);
+              const maxRateVal = Math.max(60, (Number(targetGttMin) || 25) + 10, ...pts.map(p => Number(p.drip_rate) || 0));
+              const maxCountVal = Math.max(50, ...pts.map(p => Number(p.drop_count) || 0)) * 1.15;
 
               const stepX = 920 / Math.max(1, pts.length - 1);
 
@@ -544,7 +555,7 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
                           key={`rate-${i}`} 
                           className="cursor-pointer"
                           onMouseEnter={() => setHoveredPoint({
-                            label: `Entry #${c.point.entry_id} • Drip Rate: ${c.val.toFixed(1)} gtt/min • Time: ${new Date(c.point.created_at).toLocaleTimeString()}`
+                            label: `Entry #${c.point.entry_id || (i + 1)} • Drip Rate: ${(Number(c.val) || 0).toFixed(1)} gtt/min • Time: ${c.point.created_at ? new Date(c.point.created_at).toLocaleTimeString() : 'Recent'}`
                           })}
                           onMouseLeave={() => setHoveredPoint(null)}
                         >
@@ -566,7 +577,7 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
                           key={`count-${i}`} 
                           className="cursor-pointer"
                           onMouseEnter={() => setHoveredPoint({
-                            label: `Entry #${c.point.entry_id} • Drop Count: ${c.val} drops • Time: ${new Date(c.point.created_at).toLocaleTimeString()}`
+                            label: `Entry #${c.point.entry_id || (i + 1)} • Drop Count: ${c.val} drops • Time: ${c.point.created_at ? new Date(c.point.created_at).toLocaleTimeString() : 'Recent'}`
                           })}
                           onMouseLeave={() => setHoveredPoint(null)}
                         >
@@ -779,14 +790,14 @@ export default function PatientMonitoringView({ patient, onBack, nurses = [], do
         {/* Direct Clinical Directives / Staff Messaging */}
         <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
           <h3 className="font-bold text-ink dark:text-white text-base flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <MessageSquare className="w-4 h-4 text-saline" /> Direct Directives for {patient.name}
+            <MessageSquare className="w-4 h-4 text-saline" /> Direct Directives for {patient?.name || 'Patient'}
           </h3>
 
           <form onSubmit={handleSendDirective} className="space-y-3">
             <textarea
               value={directiveText}
               onChange={(e) => setDirectiveText(e.target.value)}
-              placeholder={profile.role === 'doctor' 
+              placeholder={profile?.role === 'doctor' 
                 ? `Send direct prescription update or clinical directive to Nurse ${nurseName}...`
                 : `Send IV status update or question to Doctor ${doctorName}...`}
               rows={3}
