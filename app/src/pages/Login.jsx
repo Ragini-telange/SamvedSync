@@ -77,7 +77,7 @@ export default function Login() {
       navigate(`/${profile.role}`, { replace: true });
     } catch (err) {
       setError(err.message || 'Sign in failed. Check your details and try again.');
-    } fontally: {
+    } finally {
       setBusy(false);
     }
   }

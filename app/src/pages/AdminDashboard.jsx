@@ -1,18 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import DashboardShell from '../components/DashboardShell';
 import {
-  Overview, PatientsSection, NursesSection, AlertsSection,
+  Overview, PatientsSection, DoctorsSection, NursesSection, AlertsSection,
   AddPatientModal, EditPatientModal, AddStaffModal, EditNurseModal, Empty
 } from '../components/DashboardSections';
 import MessagesSection from '../components/MessagesSection';
 import ReportsSection from '../components/ReportsSection';
-import WhatIfSimulator from '../components/WhatIfSimulator';
 import MedicalChatbot from '../components/MedicalChatbot';
 import { supabase } from '../supabaseClient';
 import {
   loadPatients, loadNurses, loadDoctors, loadAlerts,
   assignNurseToPatient, assignDoctorToPatient, acknowledgeAlert,
-  loadPendingNurses, approveNurse, rejectNurse
+  loadPendingNurses, approveNurse, rejectNurse, deleteDoctorAccount
 } from '../lib/dashboardData';
 import { UserCheck, UserX, Clock, Shield, CheckCircle, XCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -134,6 +133,17 @@ export default function AdminDashboard() {
     loadAll();
   }
 
+  async function handleDeleteDoctor(doctorId, profileId) {
+    if (!confirm('Are you sure you want to remove this doctor from the system?')) return;
+    try {
+      await deleteDoctorAccount(doctorId, profileId);
+      showToast('Doctor Removed', 'Doctor deleted from system.');
+      loadAll();
+    } catch (err) {
+      alert(err.message || 'Failed to delete doctor.');
+    }
+  }
+
   return (
     <DashboardShell
       title={sectionTitle(active)}
@@ -142,7 +152,7 @@ export default function AdminDashboard() {
       navItems={[
         { key: 'overview', label: 'Dashboard', onClick: () => setActive('overview') },
         { key: 'patients', label: 'Patients', onClick: () => setActive('patients') },
-        { key: 'simulator', label: 'AI Risk Simulator', onClick: () => setActive('simulator') },
+        { key: 'doctors', label: 'Doctors', onClick: () => setActive('doctors') },
         { key: 'nurses', label: 'Nurses', onClick: () => setActive('nurses') },
         { key: 'verification', label: 'Nurse Verification', badge: pendingNurses.length, onClick: () => setActive('verification') },
         { key: 'alerts', label: 'Alerts', onClick: () => setActive('alerts') },
@@ -274,13 +284,21 @@ export default function AdminDashboard() {
       {active === 'alerts' && <AlertsSection alerts={alerts} loading={loading} onAcknowledge={handleAcknowledge} />}
       {active === 'messages' && <MessagesSection title="Admin Messaging Hub" />}
       {active === 'reports' && <ReportsSection />}
-      {active === 'simulator' && <WhatIfSimulator />}
+      {active === 'doctors' && (
+        <DoctorsSection
+          doctors={doctors}
+          loading={loading}
+          onAdd={() => setModal('doctor')}
+          onDelete={handleDeleteDoctor}
+        />
+      )}
 
       <AddPatientModal 
         open={modal === 'patient'} 
         onClose={() => setModal(null)} 
         onDone={() => { setModal(null); loadAll(); }} 
         nurses={nurses} 
+        doctors={doctors}
         showToast={showToast} 
       />
       
@@ -290,14 +308,16 @@ export default function AdminDashboard() {
         onClose={() => setEditingPatient(null)} 
         onDone={() => { setEditingPatient(null); loadAll(); }} 
         nurses={nurses} 
+        doctors={doctors}
         showToast={showToast} 
       />
 
       <AddStaffModal 
-        role="nurse" 
-        open={modal === 'nurse'} 
+        role={modal === 'doctor' ? 'doctor' : 'nurse'} 
+        open={modal === 'nurse' || modal === 'doctor'} 
         onClose={() => setModal(null)} 
         onDone={() => { setModal(null); loadAll(); }} 
+        showToast={showToast}
       />
 
       <EditNurseModal 
@@ -317,7 +337,7 @@ function sectionTitle(key) {
   return { 
     overview: 'Admin Dashboard', 
     patients: 'Manage Patients', 
-    simulator: 'AI What-If Risk Simulator',
+    doctors: 'Manage Doctors',
     nurses: 'Manage Nurses', 
     verification: 'Nurse Registration Requests',
     alerts: 'Hospital Alerts Log',
@@ -327,9 +347,9 @@ function sectionTitle(key) {
 }
 function sectionSubtitle(key) {
   return {
-    overview: 'MediFlow — ICU Monitoring Overview',
-    patients: 'Add patients, assign nurses, configure ThingSpeak.',
-    simulator: 'Test hypothetical IV fluid levels, drip rates, and blood backflow risks.',
+    overview: 'SamvedSync — Central Hospital Management & Safety Overview',
+    patients: 'Add patients, assign doctors & nurses, configure ThingSpeak telemetry.',
+    doctors: 'Register, inspect, and manage hospital clinical specialists.',
     nurses: 'View active nurse members of the hospital.',
     verification: 'Verify and approve pending nurse registration requests.',
     alerts: 'Full alert history across all patients.',

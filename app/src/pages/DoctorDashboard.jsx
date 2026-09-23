@@ -15,6 +15,7 @@ import {
   assignNurseToPatient, assignDoctorToPatient, acknowledgeAlert,
   loadPendingNurses, approveNurse, rejectNurse
 } from '../lib/dashboardData';
+import { syncPatientThingSpeakData } from '../lib/thingspeakSync';
 import { Clock, CheckCircle, XCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -50,9 +51,20 @@ export default function DoctorDashboard() {
     ]);
     setPatients(p); setNurses(n); setPendingNurses(pn); setDoctors(d); setAdmins(ad); setAlerts(a);
     setLoading(false);
+
+    // Sync ThingSpeak hardware telemetry for all active patients
+    p.forEach(pat => {
+      syncPatientThingSpeakData(pat).catch(() => {});
+    });
   }, []);
 
-  useEffect(() => { loadAll(); }, [loadAll]);
+  useEffect(() => { 
+    loadAll();
+    const interval = setInterval(() => {
+      loadAll();
+    }, 15000); // 15-second hardware sync interval
+    return () => clearInterval(interval);
+  }, [loadAll]);
 
   // Live updates: new alerts push in automatically via Supabase Realtime
   useEffect(() => {

@@ -30,6 +30,14 @@ In hospitals, **IV (Intravenous) drip monitoring** is still largely manual — n
 
 **SamvedSync** is a full-stack **Software + Hardware** platform that automates IV drip monitoring using IoT sensors and delivers real-time telemetry to role-based clinical dashboards.
 
+<div align="center">
+
+![SamvedSync Landing Page](screenshots/1-landing-page.png)
+
+*SamvedSync Landing Page — Role-based access for Doctors, Admins & Nurses*
+
+</div>
+
 ### How It Works:
 
 ```
@@ -53,34 +61,46 @@ ESP32 + IR Sensor + Color Sensor
 
 ---
 
-## 🖥️ Screenshots
+## 🖥️ Application Screenshots
 
-<!-- Add your screenshots to the /screenshots folder and uncomment below -->
-<!-- 
-| Landing Page | Login Page |
+### 🔐 Login & Authentication
+| Login Page | Hackathon Quick Access |
 |:---:|:---:|
-| ![Landing Page](screenshots/1-landing-page.png) | ![Login Page](screenshots/2-login-page.png) |
+| ![Login Page](screenshots/2-login-page.png) | ![Quick Access](screenshots/3-quick-access.png) |
 
-| Doctor Dashboard | Admin Dashboard |
+### 🩺 Doctor Dashboard
+| Doctor Overview | All Patients |
 |:---:|:---:|
-| ![Doctor Dashboard](screenshots/3-doctor-dashboard.png) | ![Admin Dashboard](screenshots/4-admin-dashboard.png) |
+| ![Doctor Dashboard](screenshots/4-doctor-dashboard.png) | ![All Patients](screenshots/5-doctor-patients.png) |
 
-| Nurse Dashboard | Patient Live Telemetry |
+### 🛡️ Admin Dashboard
+| Admin Overview | Manage Patients |
 |:---:|:---:|
-| ![Nurse Dashboard](screenshots/5-nurse-dashboard.png) | ![Patient Detail](screenshots/6-patient-detail.png) |
+| ![Admin Dashboard](screenshots/6-admin-dashboard.png) | ![Manage Patients](screenshots/7-admin-patients.png) |
 
-| AI Medical Chatbot | AI What-If Risk Simulator |
+### 👩‍⚕️ Nurse Dashboard
+| My Patients | Patient Live Telemetry Graph |
 |:---:|:---:|
-| ![AI Chatbot](screenshots/7-ai-chatbot.png) | ![AI Risk Simulator](screenshots/8-ai-risk-simulator.png) |
+| ![Nurse Dashboard](screenshots/8-nurse-dashboard.png) | ![Patient Detail](screenshots/9-patient-detail.png) |
 
-| Messages | Nurse Verification |
+### 🤖 AI Medical Chatbot & 🧠 AI What-If Risk Simulator
+| AI Chatbot | AI Risk Simulator |
 |:---:|:---:|
-| ![Messages](screenshots/9-messages.png) | ![Nurse Verification](screenshots/10-nurse-verification.png) |
+| ![AI Chatbot](screenshots/10-ai-chatbot.png) | ![AI Risk Simulator](screenshots/11-ai-risk-simulator.png) |
 
-| Reports | Hardware Setup |
+### 💬 Messages, 🔔 Alerts & 📊 Reports
+| Staff Messaging | Nurse Verification |
 |:---:|:---:|
-| ![Reports](screenshots/11-reports.png) | ![Hardware](screenshots/12-hardware-setup.png) |
--->
+| ![Messages](screenshots/12-messages.png) | ![Nurse Verification](screenshots/13-nurse-verification.png) |
+
+| Alerts Log | Reports Export |
+|:---:|:---:|
+| ![Alerts](screenshots/14-alerts.png) | ![Reports](screenshots/15-reports.png) |
+
+### 🔌 Hardware Setup
+| ESP32 + Sensors | Hardware Connected |
+|:---:|:---:|
+| ![Hardware Setup](screenshots/16-hardware-setup.png) | ![Hardware Connected](screenshots/17-hardware-connected.png) |
 
 ---
 

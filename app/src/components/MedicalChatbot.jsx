@@ -8,7 +8,7 @@ export default function MedicalChatbot({ patients = [] }) {
   const [messages, setMessages] = useState([
     {
       sender: 'bot',
-      text: 'Hello! 👋 I am **SamvedSync AI Medical Assistant**. Ask me about normal blood sugar levels, low sugar protocols, cancer symptoms, heart attack guidelines, IV drop rates, or nurse registration!',
+      text: 'Hello! 👋 I am **SamvedSync IV Assistant**.\n\nI can help you with IV drop rate calculations, reverse blood flow protocols, ESP32 Wi-Fi hardware telemetry, hospital alerts, and active patient monitoring status.',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
   ]);
@@ -79,7 +79,7 @@ export default function MedicalChatbot({ patients = [] }) {
 
     // Build system context from current hospital patient data
     const patientContext = patients.length > 0 
-      ? `Currently tracking ${patients.length} patients: ${patients.map(p => `${p.name} (Bed ${p.bed_number}, ${p.ward || 'ICU'})`).join(', ')}.`
+      ? `Currently tracking ${patients.length} patients: ${patients.map(p => `${p.name} (Bed ${p.bed_number}, Age ${p.age || '—'}, ${p.ward || 'ICU'})`).join(', ')}.`
       : 'Currently tracking active ICU and Ward patients.';
 
     const botAnswer = await askWatsonX(q, patientContext);
@@ -96,10 +96,10 @@ export default function MedicalChatbot({ patients = [] }) {
   };
 
   const quickPrompts = [
-    "Normal body sugar",
     "How to calculate IV drop rate?",
-    "Symptoms of cancer",
-    "Reverse blood flow protocol?"
+    "Reverse blood flow protocol",
+    "Hardware Wi-Fi telemetry",
+    "AI Risk Analysis rules"
   ];
 
   return (
@@ -120,7 +120,7 @@ export default function MedicalChatbot({ patients = [] }) {
                 alt="ChatBot" 
                 className="w-7 h-7 rounded-full object-cover border border-white/60 shadow-sm"
               />
-              <span className="hidden sm:inline">SamvedSync AI</span>
+              <span className="hidden sm:inline">SamvedSync Assistant</span>
             </div>
             <span className="absolute top-1.5 right-1.5 w-3 h-3 bg-emerald-400 rounded-full border-2 border-white animate-ping" />
           </motion.button>
@@ -143,18 +143,18 @@ export default function MedicalChatbot({ patients = [] }) {
                 <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center p-0.5 overflow-hidden">
                   <img 
                     src="/chatbot-logo.jpg" 
-                    alt="SamvedSync AI" 
+                    alt="SamvedSync IV Assistant" 
                     className="w-full h-full rounded-xl object-cover"
                   />
                 </div>
                 <div>
                   <h3 className="font-bold text-sm flex items-center gap-1.5">
-                    SamvedSync Medical AI
+                    SamvedSync IV Assistant
                     <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                   </h3>
                   <p className="text-[11px] text-saline-bright flex items-center gap-1 font-medium">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    SamvedSync Clinical Assistant
+                    Smart Infusion Telemetry & Safety
                   </p>
                 </div>
               </div>
@@ -258,7 +258,7 @@ export default function MedicalChatbot({ patients = [] }) {
                 type="text"
                 value={inputQuery}
                 onChange={(e) => setInputQuery(e.target.value)}
-                placeholder="Ask about blood sugar, IV drop rate, symptoms..."
+                placeholder="Ask about IV drip rate, reverse blood flow, alerts, telemetry..."
                 className="flex-1 text-xs sm:text-sm px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-saline/20 text-ink dark:text-white"
               />
               <button

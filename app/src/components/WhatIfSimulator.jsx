@@ -1,402 +1,392 @@
 import { useState } from 'react';
-import { Activity, AlertTriangle, CheckCircle, ShieldAlert, Cpu, Sparkles, RefreshCw, Zap, Clock, Droplet, Heart, ArrowRight } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { 
+  Activity, AlertTriangle, CheckCircle, ShieldAlert, 
+  Clock, Droplet, ArrowRight, Sparkles, RefreshCw, Info, HelpCircle
+} from 'lucide-react';
+import { calculatePrototypeRisk } from '../lib/riskEngine';
 
+/**
+ * SamvedSync What-If IV Infusion Simulator
+ * 
+ * STRICT COMPLIANCE RULES:
+ * 1. SIMULATION ONLY — NOT REAL SENSOR DATA.
+ *    Real hardware data (drop rate, flow status, reverse blood flow) is streamed directly
+ *    from ESP32 sensors via Wi-Fi and ThingSpeak into active patient telemetry.
+ * 2. Transparent, rule-based mathematical calculations (No fake trained ML models).
+ * 3. Compares prescribed flow rate vs simulated adjustment, calculating time to depletion.
+ */
 export default function WhatIfSimulator() {
-  // Input Simulator Parameters
-  const [fluidLevel, setFluidLevel] = useState(75); // % (0 - 100)
-  const [dripRate, setDripRate] = useState(25); // gtt/min (0 - 120)
-  const [prescribedRate, setPrescribedRate] = useState(100); // mL/hr (10 - 250)
-  const [dropFactor, setDropFactor] = useState(15); // 10, 15, 20, 60
-  const [isBackflow, setIsBackflow] = useState(false); // boolean
-  const [patientAge, setPatientAge] = useState(55); // years
-  const [isHighRiskWard, setIsHighRiskWard] = useState(false); // ICU / Pediatrics
+  // Simulation Inputs
+  const [totalVolume, setTotalVolume] = useState(1000); // Total bag volume in mL
+  const [remainingVolume, setRemainingVolume] = useState(650); // Current volume remaining in mL
+  const [prescribedRate, setPrescribedRate] = useState(100); // Prescribed rate in mL/hr
+  const [simulatedRate, setSimulatedRate] = useState(125); // Simulated flow rate in mL/hr
+  const [dropFactor, setDropFactor] = useState(15); // Drop factor (10, 15, 20, 60 gtt/mL)
+  const [simulatedBackflow, setSimulatedBackflow] = useState(false); // Simulated reverse blood flow
 
-  // Calculate Prescribed Target Drip Rate in gtt/min
-  const targetGttMin = Math.round((prescribedRate * dropFactor) / 60);
-  const rateDeviation = Math.abs(dripRate - targetGttMin);
+  // Mathematical Infusion Calculations
+  // Drip rate in drops/min (gtt/min) = (mL/hr * dropFactor) / 60
+  const prescribedGttMin = Math.round((prescribedRate * dropFactor) / 60);
+  const simulatedGttMin = simulatedRate > 0 ? Math.round((simulatedRate * dropFactor) / 60) : 0;
 
-  // ── AI/ML RISK SCORING ENGINE ──
-  // 1. Level Risk Component (0 - 35 points)
-  let levelRisk = 0;
-  if (fluidLevel <= 5) levelRisk = 35;
-  else if (fluidLevel <= 15) levelRisk = 28;
-  else if (fluidLevel <= 30) levelRisk = 18;
-  else if (fluidLevel <= 50) levelRisk = 8;
+  // Time to depletion in minutes = (volume in mL / rate in mL/hr) * 60
+  const prescribedMinutes = prescribedRate > 0 ? Math.round((remainingVolume / prescribedRate) * 60) : 0;
+  const simulatedMinutes = simulatedRate > 0 ? Math.round((remainingVolume / simulatedRate) * 60) : Infinity;
 
-  // 2. Drip Rate Deviation Risk Component (0 - 30 points)
-  let rateRisk = 0;
-  if (dripRate === 0 && fluidLevel > 5) {
-    rateRisk = 25; // Drip stopped occlusion
-  } else {
-    const devRatio = targetGttMin > 0 ? rateDeviation / targetGttMin : 0;
-    if (devRatio > 0.5) rateRisk = 30; // Severe under/over infusion
-    else if (devRatio > 0.25) rateRisk = 18;
-    else if (devRatio > 0.1) rateRisk = 8;
-  }
+  // Time difference
+  const timeDifferenceMins = simulatedRate > 0 ? Math.abs(prescribedMinutes - simulatedMinutes) : 0;
+  const isFaster = simulatedRate > prescribedRate;
 
-  // 3. Reverse Blood Flow Risk Component (0 - 35 points)
-  const backflowRisk = isBackflow ? 35 : 0;
+  // Remaining percentage
+  const remainingPercent = Math.min(100, Math.max(0, Math.round((remainingVolume / totalVolume) * 100)));
 
-  // 4. Patient Risk Factors (0 - 10 points)
-  const ageRisk = (patientAge > 70 || patientAge < 5) ? 5 : 0;
-  const wardRisk = isHighRiskWard ? 5 : 0;
+  // Prototype Transparent Rule-Based Risk Engine Evaluation
+  const riskAnalysis = calculatePrototypeRisk({
+    dripRate: simulatedGttMin,
+    flowStatus: simulatedRate > 0 ? 1 : 0,
+    reverseFlow: simulatedBackflow,
+    ivLevel: remainingPercent,
+    targetRate: prescribedGttMin,
+    recentAlertsCount: simulatedBackflow ? 1 : 0
+  });
 
-  // Total AI Composite Risk Score (0 - 100)
-  const totalRiskScore = Math.min(100, Math.round(levelRisk + rateRisk + backflowRisk + ageRisk + wardRisk));
+  const formatHoursMins = (totalMins) => {
+    if (totalMins === Infinity || totalMins <= 0) return totalMins === Infinity ? 'Infusion Stopped' : '0 min';
+    const hrs = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+    if (hrs === 0) return `${mins} min`;
+    return `${hrs}h ${mins}m`;
+  };
 
-  // Determine Risk Category & Color
-  let riskCategory = 'STABLE';
-  let riskBadgeColor = 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30';
-  let riskGaugeColor = '#10B981'; // Emerald
-
-  if (totalRiskScore >= 65 || isBackflow || fluidLevel <= 5) {
-    riskCategory = 'CRITICAL EMERGENCY';
-    riskBadgeColor = 'bg-rose-500/10 text-rose-600 border-rose-500/30';
-    riskGaugeColor = '#EF4444'; // Red
-  } else if (totalRiskScore >= 35) {
-    riskCategory = 'MODERATE RISK';
-    riskBadgeColor = 'bg-amber-500/10 text-amber-600 border-amber-500/30';
-    riskGaugeColor = '#F59E0B'; // Amber
-  }
-
-  // ── PREDICTIVE ML METRICS ──
-  // A. Predicted Time-to-Depletion (minutes)
-  const totalVolumeMl = 1000; // Standard bag size
-  const remainingVolumeMl = (totalVolumeMl * (fluidLevel / 100));
-  const mlPerMinActual = dropFactor > 0 ? (dripRate / dropFactor) : 0;
-  const estimatedTimeMins = mlPerMinActual > 0 ? Math.round(remainingVolumeMl / mlPerMinActual) : Infinity;
-
-  // B. Infiltration / Extravasation AI Probability (%)
-  const logitVal = -3.2 + (dripRate * 0.03) + (isBackflow ? 2.5 : 0) + (patientAge > 65 ? 0.8 : 0);
-  const infiltrationProbability = Math.round((1 / (1 + Math.exp(-logitVal))) * 100);
-
-  // Preset Scenario Loaders
-  const loadScenario = (type) => {
-    if (type === 'normal') {
-      setFluidLevel(80);
-      setDripRate(25);
+  const loadPreset = (type) => {
+    if (type === 'standard') {
+      setTotalVolume(1000);
+      setRemainingVolume(750);
       setPrescribedRate(100);
+      setSimulatedRate(100);
       setDropFactor(15);
-      setIsBackflow(false);
-      setIsHighRiskWard(false);
+      setSimulatedBackflow(false);
+    } else if (type === 'accelerated') {
+      setTotalVolume(500);
+      setRemainingVolume(400);
+      setPrescribedRate(80);
+      setSimulatedRate(160);
+      setDropFactor(20);
+      setSimulatedBackflow(false);
     } else if (type === 'low_fluid') {
-      setFluidLevel(12);
-      setDripRate(25);
+      setTotalVolume(500);
+      setRemainingVolume(45);
       setPrescribedRate(100);
+      setSimulatedRate(100);
       setDropFactor(15);
-      setIsBackflow(false);
-    } else if (type === 'backflow') {
-      setFluidLevel(45);
-      setDripRate(0);
-      setPrescribedRate(100);
-      setIsBackflow(true);
+      setSimulatedBackflow(false);
     } else if (type === 'occlusion') {
-      setFluidLevel(65);
-      setDripRate(0);
+      setTotalVolume(1000);
+      setRemainingVolume(500);
       setPrescribedRate(100);
-      setIsBackflow(false);
+      setSimulatedRate(0);
+      setDropFactor(15);
+      setSimulatedBackflow(false);
+    } else if (type === 'backflow') {
+      setTotalVolume(1000);
+      setRemainingVolume(350);
+      setPrescribedRate(100);
+      setSimulatedRate(0);
+      setDropFactor(15);
+      setSimulatedBackflow(true);
     }
   };
 
   return (
-    <div className="space-y-8 font-body">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-ink to-slate-900 text-white p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-xl relative overflow-hidden">
-        <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-saline/10 rounded-full blur-3xl pointer-events-none" />
-        
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div>
-            <div className="flex items-center gap-2.5 mb-2">
-              <span className="bg-saline/20 text-saline-bright p-2 rounded-xl border border-saline/30">
-                <Cpu className="w-6 h-6 animate-pulse" />
-              </span>
-              <span className="text-xs uppercase tracking-widest font-bold text-saline-bright bg-saline/10 px-3 py-1 rounded-full border border-saline/20">
-                AI/ML Predictive Analytics
-              </span>
+    <div className="space-y-6 font-body">
+      {/* MANDATORY PROMINENT SIMULATION DISCLAIMER BANNER */}
+      <div className="bg-amber-500/10 dark:bg-amber-500/15 border-2 border-amber-500/30 rounded-3xl p-5 shadow-sm">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="p-2.5 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs font-bold uppercase tracking-wider bg-amber-500 text-white px-2.5 py-0.5 rounded-full">
+                  SIMULATION — NOT REAL SENSOR DATA
+                </span>
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium hidden md:inline">
+                  Hardware Wi-Fi Telemetry Guard
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
+                Real patient drop rate, flow status, and reverse blood flow are fetched continuously from ESP32 hardware via Wi-Fi and ThingSpeak. This interactive calculator is strictly a hypothetical scenario planner for healthcare staff.
+              </p>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-display font-bold">
-              What-If IV Risk Simulator
-            </h2>
-            <p className="text-sm text-slate-300 mt-1 max-w-xl leading-relaxed">
-              Test hypothetical infusion parameters. The hybrid ML engine evaluates real-time risk scores, predicts time-to-depletion, and computes infiltration probability.
-            </p>
           </div>
 
-          {/* Quick Scenario Preset Buttons */}
-          <div className="flex flex-wrap gap-2">
+          {/* Quick Preset Buttons */}
+          <div className="flex flex-wrap gap-1.5 shrink-0">
             <button
-              onClick={() => loadScenario('normal')}
-              className="text-xs font-semibold px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/15 transition-all flex items-center gap-1.5"
+              onClick={() => loadPreset('standard')}
+              className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 transition-all"
             >
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Normal Infusion
+              Standard
             </button>
             <button
-              onClick={() => loadScenario('low_fluid')}
-              className="text-xs font-semibold px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/15 transition-all flex items-center gap-1.5"
+              onClick={() => loadPreset('accelerated')}
+              className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 transition-all"
             >
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" /> Low Fluid (12%)
+              Accelerated
             </button>
             <button
-              onClick={() => loadScenario('backflow')}
-              className="text-xs font-semibold px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/15 transition-all flex items-center gap-1.5"
+              onClick={() => loadPreset('low_fluid')}
+              className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 transition-all"
             >
-              <ShieldAlert className="w-3.5 h-3.5 text-rose-400" /> Reverse Flow Crisis
+              Low Fluid
+            </button>
+            <button
+              onClick={() => loadPreset('backflow')}
+              className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/30 hover:bg-rose-500/30 transition-all"
+            >
+              Backflow
             </button>
           </div>
         </div>
       </div>
 
-      {/* Main Grid: Controls vs AI Results */}
-      <div className="grid lg:grid-cols-12 gap-8">
+      {/* Main Grid: Inputs vs Calculation Comparison */}
+      <div className="grid lg:grid-cols-12 gap-6">
         
-        {/* Left Column: Input Sliders & Controls (7 Cols) */}
-        <div className="lg:col-span-7 bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
-          <h3 className="text-lg font-bold text-ink dark:text-white flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-saline" />
-            Hypothetical Telemetry Inputs
-          </h3>
+        {/* Left Column: Simulation Inputs (7 Cols) */}
+        <div className="lg:col-span-7 bg-white dark:bg-slate-900 p-6 sm:p-7 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+            <h3 className="font-bold text-ink dark:text-white text-base flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-saline" />
+              Hypothetical Infusion Parameters
+            </h3>
+            <span className="text-xs font-mono font-bold text-slate-400">
+              Interactive What-If
+            </span>
+          </div>
 
-          {/* 1. Fluid Level Slider */}
+          {/* 1. Fluid Volume Remaining */}
           <div className="space-y-2">
-            <div className="flex justify-between items-center text-sm font-semibold">
+            <div className="flex justify-between items-center text-xs font-semibold">
               <label className="text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <Droplet className="w-4 h-4 text-saline" /> IV Fluid Level:
+                <Droplet className="w-4 h-4 text-saline" /> Remaining Bag Fluid Volume:
               </label>
-              <span className="font-mono font-bold text-saline text-base">{fluidLevel}%</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-bold text-saline text-sm">{remainingVolume} mL</span>
+                <span className="text-slate-400 font-mono text-xs">({remainingPercent}%)</span>
+              </div>
             </div>
             <input
               type="range"
               min="0"
-              max="100"
-              value={fluidLevel}
-              onChange={(e) => setFluidLevel(Number(e.target.value))}
+              max={totalVolume}
+              step="10"
+              value={remainingVolume}
+              onChange={(e) => setRemainingVolume(Number(e.target.value))}
               className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-saline"
             />
             <div className="flex justify-between text-[11px] text-slate-400 font-mono">
-              <span>0% (Empty)</span>
-              <span>25%</span>
-              <span>50%</span>
-              <span>75%</span>
-              <span>100% (Full)</span>
+              <span>0 mL (Empty)</span>
+              <span>Total Bag: {totalVolume} mL</span>
             </div>
           </div>
 
-          {/* 2. Drip Rate Slider */}
-          <div className="space-y-2 pt-2">
-            <div className="flex justify-between items-center text-sm font-semibold">
-              <label className="text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <Activity className="w-4 h-4 text-blue-500" /> Actual Live Drip Rate:
+          {/* 2. Bag Size & Drop Factor */}
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">
+                Total Bag Volume (mL)
               </label>
-              <span className="font-mono font-bold text-blue-600 text-base">{dripRate} gtt/min</span>
+              <select
+                value={totalVolume}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setTotalVolume(val);
+                  if (remainingVolume > val) setRemainingVolume(val);
+                }}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-ink dark:text-white font-mono text-xs focus:outline-none focus:ring-2 focus:ring-saline/20"
+              >
+                <option value={100}>100 mL (Mini-bag)</option>
+                <option value={250}>250 mL (Small bag)</option>
+                <option value={500}>500 mL (Standard bag)</option>
+                <option value={1000}>1000 mL (Large bag)</option>
+              </select>
             </div>
-            <input
-              type="range"
-              min="0"
-              max="120"
-              value={dripRate}
-              onChange={(e) => setDripRate(Number(e.target.value))}
-              className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
-            />
-            <div className="flex justify-between text-[11px] text-slate-400 font-mono">
-              <span>0 (Stopped)</span>
-              <span>Target: {targetGttMin} gtt/min</span>
-              <span>120 gtt/min</span>
-            </div>
-          </div>
 
-          {/* 3. Prescribed Rate & Drop Factor Grid */}
-          <div className="grid sm:grid-cols-2 gap-4 pt-2">
             <div>
               <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">
-                Prescribed Rate (mL/hr)
-              </label>
-              <input
-                type="number"
-                min="10"
-                max="300"
-                value={prescribedRate}
-                onChange={(e) => setPrescribedRate(Number(e.target.value))}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-ink dark:text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-saline/20"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">
-                Drop Factor (gtt/mL)
+                Tubing Drop Factor (gtt/mL)
               </label>
               <select
                 value={dropFactor}
                 onChange={(e) => setDropFactor(Number(e.target.value))}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-ink dark:text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-saline/20"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-ink dark:text-white font-mono text-xs focus:outline-none focus:ring-2 focus:ring-saline/20"
               >
-                <option value={10}>10 gtt/mL (Macro)</option>
-                <option value={15}>15 gtt/mL (Macro Standard)</option>
-                <option value={20}>20 gtt/mL (Macro Fine)</option>
+                <option value={10}>10 gtt/mL (Macro Drip)</option>
+                <option value={15}>15 gtt/mL (Standard Macro)</option>
+                <option value={20}>20 gtt/mL (Fine Macro)</option>
                 <option value={60}>60 gtt/mL (Micro Drip)</option>
               </select>
             </div>
           </div>
 
-          {/* 4. Reverse Blood Flow Toggle */}
-          <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={`p-2.5 rounded-xl ${isBackflow ? 'bg-rose-500/10 text-rose-500' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'}`}>
-                <ShieldAlert className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-semibold text-sm text-ink dark:text-white">Reverse Blood Backflow Sensor</h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Simulate blood entering IV tubing line</p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setIsBackflow(!isBackflow)}
-              className={`px-4 py-2 rounded-xl font-bold text-xs transition-all ${
-                isBackflow 
-                  ? 'bg-rose-600 text-white shadow-md shadow-rose-500/20' 
-                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-              }`}
-            >
-              {isBackflow ? 'BACKFLOW ACTIVE' : 'NORMAL FLOW'}
-            </button>
-          </div>
-
-          {/* 5. Patient Risk Modifiers */}
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">
-                Patient Age (Years)
+          {/* 3. Prescribed Rate vs Simulated Rate */}
+          <div className="grid sm:grid-cols-2 gap-4 pt-1">
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Prescribed Rate (mL/hr)
               </label>
               <input
                 type="number"
                 min="1"
-                max="100"
-                value={patientAge}
-                onChange={(e) => setPatientAge(Number(e.target.value))}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-ink dark:text-white font-mono text-sm"
+                max="300"
+                value={prescribedRate}
+                onChange={(e) => setPrescribedRate(Math.max(1, Number(e.target.value)))}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 font-mono text-sm font-bold text-ink dark:text-white"
               />
+              <div className="text-xs text-slate-500 font-mono">
+                Target: <strong className="text-saline">{prescribedGttMin} gtt/min</strong>
+              </div>
             </div>
-            <div className="flex items-end">
-              <button
-                onClick={() => setIsHighRiskWard(!isHighRiskWard)}
-                className={`w-full py-2.5 px-4 rounded-xl border text-xs font-semibold transition-all flex items-center justify-center gap-2 ${
-                  isHighRiskWard
-                    ? 'bg-purple-500/10 text-purple-600 border-purple-500/30'
-                    : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
-                }`}
-              >
-                <Heart className="w-4 h-4" /> ICU / High-Risk Ward: {isHighRiskWard ? 'YES' : 'NO'}
-              </button>
+
+            <div className="p-4 rounded-2xl bg-blue-500/5 dark:bg-blue-500/10 border border-blue-500/20 space-y-2">
+              <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                Simulated Adjusted Rate (mL/hr)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="300"
+                value={simulatedRate}
+                onChange={(e) => setSimulatedRate(Math.max(0, Number(e.target.value)))}
+                className="w-full px-3 py-2 rounded-xl border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-800 font-mono text-sm font-bold text-blue-600"
+              />
+              <div className="text-xs text-slate-500 font-mono">
+                Simulated: <strong className="text-blue-600">{simulatedGttMin} gtt/min</strong>
+              </div>
             </div>
+          </div>
+
+          {/* 4. Simulated Reverse Blood Flow Toggle */}
+          <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-xl ${simulatedBackflow ? 'bg-rose-500/15 text-rose-600' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'}`}>
+                <ShieldAlert className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-xs text-ink dark:text-white">Simulate Reverse Blood Flow</h4>
+                <p className="text-[11px] text-slate-500">Test safety rules for venous backflow into line</p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setSimulatedBackflow(!simulatedBackflow)}
+              className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all ${
+                simulatedBackflow 
+                  ? 'bg-rose-600 text-white shadow-sm' 
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+              }`}
+            >
+              {simulatedBackflow ? 'BLOOD DETECTED' : 'CLEAR / NORMAL'}
+            </button>
           </div>
         </div>
 
-        {/* Right Column: AI/ML Model Output & Risk Analytics (5 Cols) */}
+        {/* Right Column: Comparative Time & Safety Output (5 Cols) */}
         <div className="lg:col-span-5 space-y-6">
           
-          {/* Main Risk Gauge Score Box */}
-          <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm text-center relative overflow-hidden">
-            <h3 className="text-xs uppercase tracking-widest font-bold text-slate-400 mb-6">
-              AI Composite Risk Score Index
-            </h3>
-
-            {/* Circular Gauge Score */}
-            <div className="relative w-44 h-44 mx-auto flex items-center justify-center mb-6">
-              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="40"
-                  stroke="currentColor"
-                  strokeWidth="8"
-                  fill="transparent"
-                  className="text-slate-100 dark:text-slate-800"
-                />
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="40"
-                  stroke={riskGaugeColor}
-                  strokeWidth="8"
-                  strokeDasharray="251.2"
-                  strokeDashoffset={251.2 - (251.2 * totalRiskScore) / 100}
-                  strokeLinecap="round"
-                  fill="transparent"
-                  className="transition-all duration-700 ease-out"
-                />
-              </svg>
-              <div className="absolute flex flex-col items-center">
-                <span className="text-4xl font-display font-bold text-ink dark:text-white font-mono">
-                  {totalRiskScore}
-                </span>
-                <span className="text-[11px] text-slate-400 uppercase font-semibold">out of 100</span>
-              </div>
-            </div>
-
-            {/* Risk Category Badge */}
-            <div className={`inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-full border ${riskBadgeColor}`}>
-              <Activity className="w-4 h-4 animate-pulse" />
-              {riskCategory}
-            </div>
-          </div>
-
-          {/* Machine Learning Predictions Card */}
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <h4 className="font-bold text-sm text-ink dark:text-white flex items-center gap-2">
-              <Cpu className="w-4 h-4 text-saline" />
-              Predictive ML Model Inference
+          {/* Time Remaining Comparison Card */}
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+            <h4 className="font-bold text-xs uppercase tracking-wider text-slate-400 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-saline" />
+              Time-to-Depletion Comparison
             </h4>
 
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div className="bg-slate-50 dark:bg-slate-800 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-700">
-                <span className="text-[11px] text-slate-400 font-semibold uppercase block mb-1">Time to Depletion</span>
-                <span className="text-base font-bold text-ink dark:text-white font-mono flex items-center gap-1">
-                  <Clock className="w-4 h-4 text-saline" />
-                  {estimatedTimeMins === Infinity ? 'N/A (Stopped)' : `${estimatedTimeMins} mins`}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
+                <span className="text-[11px] text-slate-400 font-semibold uppercase block mb-1">Prescribed Time</span>
+                <span className="text-xl font-bold font-mono text-ink dark:text-white">
+                  {formatHoursMins(prescribedMinutes)}
                 </span>
+                <span className="text-[10px] text-slate-400 font-mono block mt-1">@ {prescribedRate} mL/hr</span>
               </div>
 
-              <div className="bg-slate-50 dark:bg-slate-800 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-700">
-                <span className="text-[11px] text-slate-400 font-semibold uppercase block mb-1">Infiltration Risk</span>
-                <span className="text-base font-bold text-ink dark:text-white font-mono flex items-center gap-1">
-                  <Activity className="w-4 h-4 text-amber-500" />
-                  {infiltrationProbability}%
+              <div className="bg-blue-500/10 dark:bg-blue-500/15 p-4 rounded-2xl border border-blue-500/20">
+                <span className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold uppercase block mb-1">Simulated Time</span>
+                <span className="text-xl font-bold font-mono text-blue-700 dark:text-blue-300">
+                  {formatHoursMins(simulatedMinutes)}
                 </span>
+                <span className="text-[10px] text-slate-400 font-mono block mt-1">@ {simulatedRate} mL/hr</span>
               </div>
             </div>
 
-            {/* AI Directives Recommendations */}
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">
-                Clinical AI Action Directive:
+            {/* Time Difference Summary Pill */}
+            {simulatedRate !== prescribedRate && simulatedRate > 0 && (
+              <div className="bg-slate-50 dark:bg-slate-800 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs">
+                <span className="text-slate-600 dark:text-slate-300 font-medium">Difference in Completion:</span>
+                <span className={`font-mono font-bold ${isFaster ? 'text-amber-600' : 'text-blue-600'}`}>
+                  {isFaster ? `Finish ~${formatHoursMins(timeDifferenceMins)} earlier` : `Finish ~${formatHoursMins(timeDifferenceMins)} later`}
+                </span>
+              </div>
+            )}
+            {simulatedRate === 0 && (
+              <div className="bg-rose-500/10 border border-rose-500/20 p-3 rounded-2xl text-xs font-semibold text-rose-600">
+                Infusion is halted (0 mL/hr). Bag will not deplete until roller clamp is opened.
+              </div>
+            )}
+          </div>
+
+          {/* Prototype Rule-Based Risk Index */}
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="font-bold text-xs uppercase tracking-wider text-slate-400">
+                Prototype Risk Evaluation
+              </h4>
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${riskAnalysis.badgeColor}`}>
+                {riskAnalysis.level} RISK
               </span>
-              <ul className="text-xs text-slate-600 dark:text-slate-300 space-y-2 leading-relaxed">
-                {isBackflow && (
-                  <li className="flex items-start gap-2 text-rose-600 dark:text-rose-400 font-semibold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 mt-1.5" />
-                    EMERGENCY: Clamp line immediately and elevate fluid bag 24-36 inches above site.
-                  </li>
-                )}
-                {fluidLevel <= 15 && (
-                  <li className="flex items-start gap-2 text-amber-600 dark:text-amber-400 font-medium">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 mt-1.5" />
-                    Prepare replacement IV bag before level reaches 5% to prevent air entry.
-                  </li>
-                )}
-                {rateDeviation > 10 && (
-                  <li className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
-                    <span className="w-1.5 h-1.5 rounded-full bg-saline shrink-0 mt-1.5" />
-                    Adjust roller clamp. Target rate = {targetGttMin} gtt/min (current = {dripRate} gtt/min).
-                  </li>
-                )}
-                {!isBackflow && fluidLevel > 15 && rateDeviation <= 10 && (
-                  <li className="flex items-start gap-2 text-emerald-600 dark:text-emerald-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 mt-1.5" />
-                    Infusion parameters are stable within normal physiological boundaries.
-                  </li>
-                )}
-              </ul>
             </div>
+
+            <div className="flex items-center gap-4">
+              <div className="text-3xl font-display font-bold font-mono text-ink dark:text-white">
+                {riskAnalysis.score}<span className="text-sm font-normal text-slate-400">/100</span>
+              </div>
+              <div className="flex-1">
+                <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full transition-all duration-500 rounded-full"
+                    style={{ 
+                      width: `${riskAnalysis.score}%`, 
+                      backgroundColor: riskAnalysis.gaugeColor || (riskAnalysis.score >= 51 ? '#ef4444' : riskAnalysis.score >= 21 ? '#f59e0b' : '#10b981') 
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Contributing Risk Factors & Reasons */}
+            <div className="text-xs space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <span className="font-semibold text-slate-500 uppercase tracking-wider block text-[10px]">
+                Active Safety Factors:
+              </span>
+              {riskAnalysis.factors && riskAnalysis.factors.length > 0 ? (
+                riskAnalysis.reasons.map((r, i) => (
+                  <div key={i} className="flex items-start gap-1.5 text-slate-600 dark:text-slate-300 text-xs">
+                    <span className="text-rose-500 font-bold">•</span>
+                    <span>{r}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-emerald-600 dark:text-emerald-400 text-xs flex items-center gap-1.5">
+                  <CheckCircle className="w-3.5 h-3.5" /> All parameters within standard safety limits
+                </div>
+              )}
+            </div>
+
+            <p className="text-[10px] text-slate-400 italic pt-1">
+              {riskAnalysis.disclaimer}
+            </p>
           </div>
 
         </div>
